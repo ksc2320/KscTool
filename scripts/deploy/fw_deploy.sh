@@ -30,14 +30,30 @@ readonly ICON_WARN="${C_YELLOW}⚠${C_RESET}"
 readonly ICON_FW="${C_MAGENTA}⬢${C_RESET}"
 
 # ── 설정: 환경변수 우선, 없으면 기본값 ──
-DEFAULT_AP_IP="172.30.1.1"
-HOST_IP="172.30.1.3"
 HTTP_PORT=""                          # 자동 감지 (8080 → 80 순서)
 TFTP_DIR="${TFTP_PATH:-/tftpboot}"    # 환경변수 $TFTP_PATH 사용
 SYSUPGRADE_OPTS=""
 
 # FW 파일: 환경변수 $FW_NAME → tftpboot 내 최신 .img 자동 감지
 AUTO_FW_NAME="${FW_NAME:-}"
+
+# ── enx 인터페이스 기반 자동 감지 ──
+# enx* USB 이더넷의 IP로 HOST_IP + AP 서브넷 추출
+detect_from_enx() {
+    local enx_info
+    enx_info=$(ip -4 addr show 2>/dev/null | grep -A2 'enx' | grep 'inet ' | head -1)
+    if [ -n "$enx_info" ]; then
+        HOST_IP=$(echo "$enx_info" | awk '{print $2}' | cut -d/ -f1)
+        # 서브넷 기반 AP 기본 IP: x.x.x.254
+        local subnet
+        subnet=$(echo "$HOST_IP" | sed 's/\.[0-9]*$/.254/')
+        DEFAULT_AP_IP="$subnet"
+    else
+        HOST_IP="172.30.1.3"
+        DEFAULT_AP_IP="172.30.1.254"
+    fi
+}
+detect_from_enx
 
 # ── 인자 파싱 ──
 AP_IP="${DEFAULT_AP_IP}"
@@ -55,6 +71,8 @@ while [[ $# -gt 0 ]]; do
             echo "    fwd -p 80              # HTTP 포트 지정"
             echo ""
             echo -e "  ${C_WHITE}자동 감지:${C_RESET}"
+            echo "    AP IP    : enx* 인터페이스 서브넷의 .254"
+            echo "    Host IP  : enx* 인터페이스 IP"
             echo "    FW 파일  : \$FW_NAME → tftpboot 최신 .img"
             echo "    TFTP 경로: \$TFTP_PATH → /tftpboot"
             echo "    HTTP 포트: -p 지정 → 8080 → 80 (순서대로 시도)"
@@ -108,7 +126,12 @@ echo ""
 echo -e "${C_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}"
 echo -e "${ICON_FW}  ${C_WHITE}FW Deploy${C_RESET} — AP 펌웨어 자동 배포"
 echo -e "${C_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${C_RESET}"
-echo -e "  AP   : ${C_YELLOW}${AP_IP}${C_RESET}"
+# enx 감지 여부 표시
+ENX_IF=$(ip link show 2>/dev/null | grep -oE 'enx[a-f0-9]+' | head -1)
+ENX_TAG=""
+[ -n "$ENX_IF" ] && ENX_TAG="${C_DIM} (${ENX_IF})${C_RESET}"
+
+echo -e "  AP   : ${C_YELLOW}${AP_IP}${C_RESET}${ENX_TAG}"
 echo -e "  Host : ${C_YELLOW}${HOST_IP}:${HTTP_PORT}${C_RESET}"
 echo -e "  FW   : ${C_YELLOW}${FW_FILE}${C_RESET} (${C_WHITE}${FW_SIZE}${C_RESET}, ${C_DIM}${FW_DATE}${C_RESET})"
 [ -n "$SYSUPGRADE_OPTS" ] && echo -e "  Opts : ${C_RED}${SYSUPGRADE_OPTS} (설정 초기화)${C_RESET}"
