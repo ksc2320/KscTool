@@ -70,6 +70,7 @@ _dw_source='auto'   # auto / ssh / serial / file
 _dw_file=''
 _dw_notify=0
 _dw_mark_count=0
+_dw_sed_script=''
 
 # ============================================================================
 #  설정 로드
@@ -163,16 +164,11 @@ except:
 # ============================================================================
 _dw_stream_ssh() {
     local ip="$1" user="$2" pass="$3"
+    local ssh_opts=(-o StrictHostKeyChecking=no -o ConnectTimeout=5 -o ServerAliveInterval=10)
     if [ -n "$pass" ] && command -v sshpass &>/dev/null; then
-        sshpass -p "$pass" ssh \
-            -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-            -o ServerAliveInterval=10 \
-            "${user}@${ip}" "logread -f" 2>/dev/null
+        sshpass -p "$pass" ssh "${ssh_opts[@]}" "${user}@${ip}" "logread -f" 2>/dev/null
     else
-        ssh \
-            -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-            -o ServerAliveInterval=10 \
-            "${user}@${ip}" "logread -f" 2>/dev/null
+        ssh "${ssh_opts[@]}" "${user}@${ip}" "logread -f" 2>/dev/null
     fi
 }
 
@@ -198,19 +194,16 @@ except Exception as e:
 # ============================================================================
 _dw_filter_loop() {
     local line saving=0
-    local pat_count=${#_dw_patterns[@]}
 
     while IFS= read -r line; do
         # ── 패턴 매칭 (저장·알림 트리거) ──────────────────────────────────
         local matched_pat=''
-        if [ "$pat_count" -gt 0 ]; then
-            for pat in "${_dw_patterns[@]}"; do
-                if echo "$line" | grep -qi "$pat" 2>/dev/null; then
-                    matched_pat="$pat"
-                    break
-                fi
-            done
-        fi
+        for pat in "${_dw_patterns[@]}"; do
+            if [[ "$line" =~ $pat ]]; then
+                matched_pat="$pat"
+                break
+            fi
+        done
 
         # ── save-on-match: 첫 패턴 감지 시 저장 시작 ─────────────────────
         if [ "$_dw_save_on_match" -eq 1 ] && [ "$saving" -eq 0 ] && [ -n "$matched_pat" ]; then
@@ -223,29 +216,12 @@ _dw_filter_loop() {
             notify-send "dvwatch" "패턴 감지: ${matched_pat}" 2>/dev/null || printf '\a'
         fi
 
-        # ── 컬러 출력 ─────────────────────────────────────────────────────
-        local colored_line="$line"
-
-        # [ksc] 태그: 항상 빨간색 (하드코딩)
-        colored_line=$(echo "$colored_line" \
-            | sed "s/\(\[ksc\][^)]*\)/${_F_RED//\\/\\\\}\1${_F_RST//\\/\\\\}/g")
-
-        # 사용자 패턴: 컬러 순환
-        local i=0
-        for pat in "${_dw_patterns[@]}"; do
-            local color="${_DW_PAT_COLORS[$((i % ${#_DW_PAT_COLORS[@]}))]}"
-            colored_line=$(echo "$colored_line" \
-                | sed "s/\(${pat}\)/${color//\\/\\\\}\1${_F_RST//\\/\\\\}/gI")
-            ((i++))
-        done
-
-        echo -e "$colored_line"
+        # ── 컬러 출력 (사전 빌드된 sed 스크립트 단일 호출) ────────────────
+        echo "$(echo "$line" | sed "$_dw_sed_script")"
 
         # ── 저장 ──────────────────────────────────────────────────────────
-        if [ -n "$_dw_save_file" ]; then
-            if [ "$_dw_save" -eq 1 ] || [ "$saving" -eq 1 ]; then
-                echo "$line" >> "$_dw_save_file"
-            fi
+        if [ "$_dw_save" -eq 1 ] || [ "$saving" -eq 1 ]; then
+            echo "$line" >> "$_dw_save_file"
         fi
     done
 }
@@ -352,6 +328,21 @@ _dw_run() {
     _ln
     echo ""
 
+    # ── sed 스크립트 사전 빌드 (루프 진입 전 1회) ─────────────────────────
+    # _F_* 변수는 '\033[...' 리터럴 → sed 치환에서 \0(전체매치)로 오해석됨
+    # $'\033' 실제 ESC 문자로 변환 후 빌드해야 정상 동작
+    local _esc=$'\033'
+    local _rst="${_F_RST/\\033/$_esc}"
+    local _red="${_F_RED/\\033/$_esc}"
+    _dw_sed_script="s#\(\[ksc\][^)]*\)#${_red}\1${_rst}#g"
+    local _si=0
+    for _sp in "${_dw_patterns[@]}"; do
+        local _sc="${_DW_PAT_COLORS[$((_si % ${#_DW_PAT_COLORS[@]}))]}"
+        local _scc="${_sc/\\033/$_esc}"
+        _dw_sed_script+=";s#\(${_sp}\)#${_scc}\1${_rst}#gI"
+        ((_si++))
+    done
+
     # ── 시그널 핸들러 ──────────────────────────────────────────────────────
     trap '_dw_cleanup' INT TERM
     trap '_dw_insert_mark' QUIT
@@ -456,8 +447,6 @@ _dw_main() {
             -p)
                 [ -z "$2" ] && { echo -e "  ${_FAIL} -p 옵션에 패턴을 지정하세요"; exit 1; }
                 _dw_patterns+=("$2"); shift 2 ;;
-            -p=*)
-                _dw_patterns+=("${1#-p=}"); shift ;;
             -s)
                 _dw_save=1; shift ;;
             --save-on-match)
