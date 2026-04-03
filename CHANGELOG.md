@@ -7,6 +7,20 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.2.0] — 2026-04-03
+
+#### Added
+- `_banner()` — ok/fail/warn 컬러 박스 (경과 시간 선택 표시)
+- `_ftd_print_header()` — 단계 흐름 표시 `[1] 복사 ▸ [2] HTTP ▸ [3] wget (▸ [4] upgrade)`
+- `_ftd_ping_check()` — 3회 재시도 + 점 애니메이션, 실패 시 계속 여부 확인
+- `_ftd_wait_boot()` — `\r` 실시간 경과 타이머 + `_banner ok/warn` 결과 박스
+
+#### Changed
+- sysupgrade 확인 프롬프트 → 빨간 경고 박스 + 취소 시 `_banner warn`
+- 파일 전송 완료 → `_banner ok`, 부팅 대기 완료 → `_banner ok (경과시간)`
+
+---
+
 ### [2.1.0] — 2026-04-03
 
 #### Added

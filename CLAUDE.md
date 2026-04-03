@@ -126,8 +126,12 @@ TOOL_VERSION='X.Y.Z'
 
 ## 5. 스크립트 스타일
 
+**UX 경험 우선 원칙**: 사용자가 "지금 뭐가 되고 있는지" 항상 알 수 있게 만든다.
+
+### 5.1 컬러 및 아이콘
+
 - **컬러 적극 사용** (SVN 미포함 → 자유롭게)
-- 단계 표시: `[1/3]` 형태
+- 단계 표시: `[1/3]` 또는 `[1] 복사 ▸ [2] HTTP ▸ [3] wget` 흐름 형태
 - 실패 시 이유 명시 + 해결 힌트 출력
 - `_OK` / `_FAIL` / `_RUN` / `_WARN` 아이콘 통일
 
@@ -138,6 +142,54 @@ _F_RED='\033[1;31m'; _F_GREEN='\033[1;32m'; _F_YELLOW='\033[1;33m'
 _F_CYAN='\033[1;36m'; _F_WHITE='\033[1;37m'; _F_DIM='\033[0;90m'; _F_RST='\033[0m'
 _OK="${_F_GREEN}✔${_F_RST}"; _FAIL="${_F_RED}✘${_F_RST}"
 _RUN="${_F_CYAN}▶${_F_RST}"; _WARN="${_F_YELLOW}⚠${_F_RST}"
+```
+
+### 5.2 결과 배너 (`_banner`)
+
+성공/실패/경고 결과는 단순 echo 대신 `_banner`로 시각적 구분:
+
+```bash
+_banner() {
+    local type="$1" msg="$2" elapsed="${3:-}"
+    local t_str=""; [ -n "$elapsed" ] && t_str=" ${_F_DIM}(${elapsed}s)${_F_RST}"
+    case "$type" in
+        ok)   echo -e "${_F_GREEN}╔══╗\n║ ✔ ${_F_WHITE}${msg}${t_str}\n${_F_GREEN}╚══╝${_F_RST}" ;;
+        fail) echo -e "${_F_RED}╔══╗\n║ ✘ ${_F_WHITE}${msg}${t_str}\n${_F_RED}╚══╝${_F_RST}" ;;
+        warn) echo -e "${_F_YELLOW}╔══╗\n║ ⚠ ${_F_WHITE}${msg}${t_str}\n${_F_YELLOW}╚══╝${_F_RST}" ;;
+    esac
+}
+# 사용: _banner ok "완료 메시지" "$elapsed"
+```
+
+### 5.3 대기 중 실시간 피드백
+
+장시간 대기(부팅, 네트워크 등) 시 `\r` 카운터로 사용자가 얼마나 기다렸는지 표시:
+
+```bash
+printf "\r  ${_F_DIM}대기 중 %3ds ...${_F_RST}" "$elapsed"
+```
+
+### 5.4 위험 동작 확인 프롬프트
+
+재부팅·포맷 등 비가역 동작은 컬러 박스로 강조:
+
+```bash
+echo -e "${_F_RED}╔════════════════════╗${_F_RST}"
+echo -e "${_F_RED}║  ⚠  AP가 재부팅됩니다 ║${_F_RST}"
+echo -e "${_F_RED}╚════════════════════╝${_F_RST}"
+echo -ne "  진행? [y/N]: "; read -r confirm
+```
+
+### 5.5 재시도 + 애니메이션
+
+ping/연결 등 재시도 로직은 점 애니메이션으로 진행 상황 표시:
+
+```bash
+for i in 1 2 3; do
+    ping -c1 -W1 "$host" &>/dev/null && { echo -e "${_OK}"; return 0; }
+    echo -ne "${_F_DIM}.${_F_RST}"
+    [ $i -lt 3 ] && sleep 1
+done
 ```
 
 ---

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  file_to_dev.sh — AP 장치 펌웨어/파일 전송 도구 v2.1.0
+#  file_to_dev.sh — AP 장치 펌웨어/파일 전송 도구 v2.2.0
 # ============================================================================
 #  단독 실행:  ./file_to_dev.sh <command> [args]
 #  소싱(bash): source file_to_dev.sh  → 함수 등록 + dv 통합
@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.1.0'
+FTD_VERSION='2.2.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -33,11 +33,35 @@ _OK="${_F_GREEN}✔${_F_RST}"; _FAIL="${_F_RED}✘${_F_RST}"
 _RUN="${_F_CYAN}▶${_F_RST}"; _WARN="${_F_YELLOW}⚠${_F_RST}"
 _CLIP="${_F_YELLOW}📋${_F_RST}"
 
-_ln() { echo -e "${_F_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${_F_RST}"; }
-_hd() { _ln; echo -e "  ${_F_BOLD}${_F_WHITE}$*${_F_RST}"; _ln; }
+_ln()  { echo -e "${_F_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${_F_RST}"; }
+_hd()  { _ln; echo -e "  ${_F_BOLD}${_F_WHITE}$*${_F_RST}"; _ln; }
+# 결과 배너: _banner ok "메시지" / _banner fail "메시지"
+_banner() {
+    local type="$1" msg="$2" elapsed="${3:-}"
+    local t_str=""; [ -n "$elapsed" ] && t_str=" ${_F_DIM}(${elapsed}s)${_F_RST}"
+    echo ""
+    case "$type" in
+        ok)
+            echo -e "${_F_GREEN}╔══════════════════════════════════════════════════╗${_F_RST}"
+            echo -e "${_F_GREEN}║  ✔  ${_F_WHITE}${msg}${_F_RST}${t_str}"
+            echo -e "${_F_GREEN}╚══════════════════════════════════════════════════╝${_F_RST}"
+            ;;
+        fail)
+            echo -e "${_F_RED}╔══════════════════════════════════════════════════╗${_F_RST}"
+            echo -e "${_F_RED}║  ✘  ${_F_WHITE}${msg}${_F_RST}${t_str}"
+            echo -e "${_F_RED}╚══════════════════════════════════════════════════╝${_F_RST}"
+            ;;
+        warn)
+            echo -e "${_F_YELLOW}╔══════════════════════════════════════════════════╗${_F_RST}"
+            echo -e "${_F_YELLOW}║  ⚠  ${_F_WHITE}${msg}${_F_RST}${t_str}"
+            echo -e "${_F_YELLOW}╚══════════════════════════════════════════════════╝${_F_RST}"
+            ;;
+    esac
+    echo ""
+}
 
 # ── 설정 경로 ─────────────────────────────────────────────────────────────
-FTD_CONF_DIR="$HOME/.config/ftd"
+FTD_CONF_DIR="$HOME/.devtools/ftd"
 FTD_CONF="${FTD_CONF_DIR}/config"
 FTD_LOG="${FTD_CONF_DIR}/history.log"
 FTD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
@@ -750,18 +774,25 @@ _ftd_transfer() {
 
         if [ $do_upgrade -eq 1 ]; then
             echo ""
-            echo -e "${_WARN} ${_F_YELLOW}sysupgrade 실행 시 AP 재부팅${_F_RST}"
-            [ -n "$sysupgrade_opts" ] && echo -e "  ${_F_RED}옵션: ${sysupgrade_opts}${_F_RST}"
-            echo -ne "   진행? [y/N]: "; read -r confirm
-            [[ ! "$confirm" =~ ^[yY]$ ]] && echo -e "${_OK} 다운로드만 완료" && _ftd_log "CLIP" "$file_name" "$ap_ip" && return 0
+            echo -e "${_F_RED}  ╔════════════════════════════════════════╗${_F_RST}"
+            echo -e "${_F_RED}  ║  ⚠  AP가 재부팅됩니다 — sysupgrade   ║${_F_RST}"
+            [ -n "$sysupgrade_opts" ] && \
+            echo -e "${_F_RED}  ║     옵션: ${_F_WHITE}${sysupgrade_opts}${_F_RED}                      ║${_F_RST}"
+            echo -e "${_F_RED}  ╚════════════════════════════════════════╝${_F_RST}"
+            echo -ne "  진행? [y/N]: "; read -r confirm
+            if [[ ! "$confirm" =~ ^[yY]$ ]]; then
+                _banner warn "다운로드만 완료 — upgrade 취소"
+                _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0
+            fi
 
+            local t_start; t_start=$(date +%s)
             echo -e "${_RUN} sysupgrade 전송..."
             _ftd_serial_cmd "$serial_dev" "$cmd_upgrade" 2
-            _ln; echo -e "${_OK} ${_F_GREEN}sysupgrade 전송 완료 — 재부팅 중${_F_RST}"; _ln
+            local elapsed=$(( $(date +%s) - t_start ))
             _ftd_log "OK" "$file_name" "$ap_ip"
             _ftd_wait_boot "$ap_ip"
         else
-            _ln; echo -e "${_OK} ${_F_GREEN}파일 전송 완료 — /tmp/${file_name}${_F_RST}"; _ln
+            _banner ok "파일 전송 완료 — /tmp/${file_name}"
             _ftd_log "OK" "$file_name" "$ap_ip"
         fi
     else
@@ -808,15 +839,26 @@ _ftd_print_header() {
         || mode_tag="${_F_YELLOW}클립보드${_F_RST}${_F_DIM}(SecureCRT 수동 붙여넣기)${_F_RST}"
     local dry_tag=""; [ "$dry" = "1" ] && dry_tag=" ${_F_MAG}[DRY-RUN]${_F_RST}"
 
+    # 단계 흐름 표시
+    local step_copy="${_F_CYAN}[1] 복사${_F_RST}"
+    local step_http="${_F_CYAN}[2] HTTP${_F_RST}"
+    local step_send
+    if [ "$do_upg" = "1" ]; then
+        step_send="${_F_CYAN}[3] wget${_F_RST} ${_F_DIM}▸${_F_RST} ${_F_CYAN}[4] upgrade${_F_RST}"
+    else
+        step_send="${_F_CYAN}[3] wget${_F_RST}"
+    fi
+
     echo ""
     _ln
-    echo -e "  ${_F_BOLD}${_F_WHITE}file_to_dev${_F_RST}${dry_tag}"
+    echo -e "  ${_F_BOLD}${_F_WHITE}file_to_dev v${FTD_VERSION}${_F_RST}${dry_tag}"
+    echo -e "  ${step_copy} ${_F_DIM}▸${_F_RST} ${step_http} ${_F_DIM}▸${_F_RST} ${step_send}"
     _ln
     echo -e "  File : ${_F_YELLOW}${file}${_F_RST} ${_F_DIM}(${fw_size}, ${fw_date})${_F_RST}"
     echo -e "  AP   : ${_F_YELLOW}${ap}${_F_RST} ${enx_tag}"
     echo -e "  Host : ${_F_YELLOW}${host}:${port}${_F_RST}"
     echo -e "  Mode : ${mode_tag}"
-    [ "$do_upg" = "1" ] && echo -e "  Upg  : ${_F_GREEN}sysupgrade${_F_RST} ${_F_DIM}${opts:-(옵션 없음)}${_F_RST}"
+    [ "$do_upg" = "1" ] && [ -n "$opts" ] && echo -e "  Opts : ${_F_RED}${opts}${_F_RST}"
     [ "$FTD_AUTO_LOGIN" = "on" ] && echo -e "  Login: ${_F_GREEN}on${_F_RST} ${_F_DIM}(${FTD_LOGIN_USER})${_F_RST}"
     _ln
     echo ""
@@ -962,29 +1004,40 @@ _ftd_check_http() {
 # ── AP ping ───────────────────────────────────────────────────────────────
 _ftd_ping_check() {
     local ap="$1"
-    echo -e "${_RUN} AP ping (${ap})..."
-    if ping -c1 -W2 "$ap" &>/dev/null; then
-        echo -e "${_OK} AP 응답 확인"
-        return 0
-    fi
-    echo -e "${_WARN} ${_F_YELLOW}AP 응답 없음. 계속? [y/N]${_F_RST} "
-    read -r ans; [[ "$ans" =~ ^[yY]$ ]]
+    echo -ne "${_RUN} AP ping ${_F_DIM}(${ap})${_F_RST} "
+    # 3회 재시도 (1s 간격)
+    for i in 1 2 3; do
+        if ping -c1 -W1 "$ap" &>/dev/null; then
+            echo -e "${_OK}"
+            return 0
+        fi
+        echo -ne "${_F_DIM}.${_F_RST}"
+        [ $i -lt 3 ] && sleep 1
+    done
+    echo ""
+    echo -e "  ${_WARN} ${_F_YELLOW}AP 응답 없음 (${ap})${_F_RST}"
+    echo -ne "  계속 진행? [y/N]: "; read -r ans; [[ "$ans" =~ ^[yY]$ ]]
 }
 
 _ftd_wait_boot() {
     local ap="$1"
-    echo -ne "${_F_DIM}   AP 재부팅 대기"
+    local t_start; t_start=$(date +%s)
+    echo ""
+    echo -ne "  ${_F_DIM}AP 재부팅 대기 중 "
     for ((i=1; i<=50; i++)); do
         sleep 2
         if ping -c1 -W1 "$ap" &>/dev/null; then
+            local elapsed=$(( $(date +%s) - t_start ))
             echo -e "${_F_RST}"
-            echo -e "${_OK} ${_F_GREEN}AP 부팅 완료! (${i}회×2 = $(( i * 2 ))초)${_F_RST}"
+            _banner ok "AP 부팅 완료" "$elapsed"
             return 0
         fi
-        echo -ne "."
+        local elapsed=$(( $(date +%s) - t_start ))
+        # 카운터 갱신 (같은 줄 덮어쓰기)
+        printf "\r  ${_F_DIM}AP 재부팅 대기 중 %3ds ...${_F_RST}" "$elapsed"
     done
-    echo -e "${_F_RST}"
-    echo -e "${_WARN} 100초 초과 — 수동 확인 필요"
+    echo ""
+    _banner warn "100초 초과 — 수동 확인 필요"
 }
 
 # ── 로그 ──────────────────────────────────────────────────────────────────
