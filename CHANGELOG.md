@@ -27,7 +27,8 @@
 #### 추가
 
 - `(없음)` — INDEX.md 파싱, 규격서 버전 + 파일 존재 여부 한눈에 출력
-- `list` — Document/ 전체 PDF 버전 스캔, latest/ 연결 여부 표시
+- `list` — latest/ 최신본만 표시 (fzf picker 또는 텍스트 목록)
+- `list all` — Document/ 전체 PDF 스캔, latest/ 연결 여부 + 버전 표시
 - `check` — latest/ 심볼릭 링크 유효성 검사
 - `open <키워드>` — 키워드로 규격서 찾아서 xdg-open
 - 인자 없는 키워드도 `open` 단축으로 처리
