@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  file_to_dev.sh — AP 장치 펌웨어/파일 전송 도구 v2.2.0
+#  file_to_dev.sh — AP 장치 펌웨어/파일 전송 도구 v2.3.0
 # ============================================================================
 #  단독 실행:  ./file_to_dev.sh <command> [args]
 #  소싱(bash): source file_to_dev.sh  → 함수 등록 + dv 통합
@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.2.0'
+FTD_VERSION='2.3.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -644,7 +644,9 @@ _ftd_scan_fw_files() {
             else sz=bytes"B"
             cmd="date -d @"$1" +\"%Y-%m-%d %H:%M\""
             cmd | getline dt; close(cmd)
-            printf "%-16s  %-6s  %s\n", dt, sz, path
+            rev=""
+            if (match(path, /r[0-9]+/)) rev=substr(path, RSTART, RLENGTH)
+            printf "%-16s  %-7s  %-6s  %s\n", dt, sz, rev, path
         }'
 }
 
@@ -726,13 +728,18 @@ _ftd_transfer() {
     [ $upgrade_n -eq 1 ] && sysupgrade_opts="${sysupgrade_opts} -n"
     sysupgrade_opts="${sysupgrade_opts# }"
 
-    # 시리얼 감지
-    local serial_dev=""
-    _ftd_detect_serial "$FTD_SERIAL_DEV"
+    # CRT 창 감지 우선, 없으면 시리얼 감지
+    local crt_wid="" serial_dev=""
+    crt_wid=$(_ftd_find_crt_window)
+    [ -z "$crt_wid" ] && _ftd_detect_serial "$FTD_SERIAL_DEV"
+
+    # 헤더 모드 표시용 (CRT 타이틀은 _ftd_find_crt_window 에서 캐싱)
+    local hdr_serial="$serial_dev"
+    [ -n "$crt_wid" ] && hdr_serial="CRT:${_CRT_WINDOW_TITLE// - SecureCRT*/}"
 
     # 헤더
     _ftd_print_header "$file_name" "$ap_ip" "$server_ip" "$http_port" \
-        "$serial_dev" $do_upgrade "$sysupgrade_opts" $dry
+        "$hdr_serial" $do_upgrade "$sysupgrade_opts" $dry
 
     # dry-run
     if [ $dry -eq 1 ]; then
@@ -757,8 +764,20 @@ _ftd_transfer() {
 
     echo -e "${_RUN} ${_F_BOLD}[3/3]${_F_RST} AP 전송..."
 
-    if [ -n "$serial_dev" ]; then
-        # 시리얼 모드
+    if [ -n "$crt_wid" ]; then
+        echo -e "${_F_GREEN}  SecureCRT 자동 붙여넣기 모드${_F_RST}"
+        echo -e "${_F_DIM}   ${cmd_wget}${_F_RST}"
+        _ftd_crt_paste "$cmd_wget" "$crt_wid"
+        echo -e "  ${_CLIP} wget 명령 전송 완료 — SecureCRT 창 확인"
+
+        if [ $do_upgrade -eq 1 ]; then
+            echo -ne "  wget 완료 후 Enter... "; read -r
+            _ftd_upgrade_confirm "$sysupgrade_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
+            _ftd_crt_paste "$cmd_upgrade" "$crt_wid"
+            _ftd_log "OK" "$file_name" "$ap_ip"
+            _ftd_wait_boot "$ap_ip"
+        fi
+    elif [ -n "$serial_dev" ]; then
         [ "$FTD_AUTO_LOGIN" = "on" ] && _ftd_serial_login "$serial_dev"
 
         echo -e "${_F_DIM}   ${cmd_wget}${_F_RST}"
@@ -773,18 +792,7 @@ _ftd_transfer() {
         fi
 
         if [ $do_upgrade -eq 1 ]; then
-            echo ""
-            echo -e "${_F_CYAN}  ╔════════════════════════════════════════╗${_F_RST}"
-            echo -e "${_F_CYAN}  ║  ▶  AP가 재부팅됩니다 — sysupgrade   ║${_F_RST}"
-            [ -n "$sysupgrade_opts" ] && \
-            echo -e "${_F_CYAN}  ║     옵션: ${_F_WHITE}${sysupgrade_opts}${_F_CYAN}                      ║${_F_RST}"
-            echo -e "${_F_CYAN}  ╚════════════════════════════════════════╝${_F_RST}"
-            echo -ne "  진행? [y/N]: "; read -r confirm
-            if [[ ! "$confirm" =~ ^[yY]$ ]]; then
-                _banner warn "다운로드만 완료 — upgrade 취소"
-                _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0
-            fi
-
+            _ftd_upgrade_confirm "$sysupgrade_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
             echo -e "${_RUN} sysupgrade 전송..."
             _ftd_serial_cmd "$serial_dev" "$cmd_upgrade" 2
             _ftd_log "OK" "$file_name" "$ap_ip"
@@ -832,9 +840,13 @@ _ftd_print_header() {
     fw_date=$(stat -c '%y' "${FTD_TFTP_PATH}/${file}" 2>/dev/null | cut -d. -f1)
     local enx_if="${_DETECTED_ENX_IF:-}"
     [ -n "$enx_if" ] && enx_tag="${_F_DIM}(${enx_if})${_F_RST}" || enx_tag=""
-    [ -n "$serial" ] \
-        && mode_tag="${_F_GREEN}시리얼${_F_RST} ${_F_DIM}${serial}${_F_RST}" \
-        || mode_tag="${_F_YELLOW}클립보드${_F_RST}${_F_DIM}(SecureCRT 수동 붙여넣기)${_F_RST}"
+    if [[ "$serial" == CRT:* ]]; then
+        mode_tag="${_F_GREEN}CRT 자동붙여넣기${_F_RST} ${_F_DIM}${serial#CRT:}${_F_RST}"
+    elif [ -n "$serial" ]; then
+        mode_tag="${_F_GREEN}시리얼${_F_RST} ${_F_DIM}${serial}${_F_RST}"
+    else
+        mode_tag="${_F_YELLOW}클립보드${_F_RST}${_F_DIM}(수동 붙여넣기)${_F_RST}"
+    fi
     local dry_tag=""; [ "$dry" = "1" ] && dry_tag=" ${_F_MAG}[DRY-RUN]${_F_RST}"
 
     # 단계 흐름 표시
@@ -881,9 +893,11 @@ _ftd_detect_serial() {
     local candidates=()
     _SERIAL_SKIP_REASON=""
     if [ "$target" = "off" ]; then serial_dev=""; return; fi
-    [ "$target" = "auto" ] \
-        && candidates=(/dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyACM0) \
-        || candidates=("$target")
+    if [ "$target" = "auto" ]; then
+        mapfile -t candidates < <(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null)
+    else
+        candidates=("$target")
+    fi
 
     local found_any=0
     for dev in "${candidates[@]}"; do
@@ -923,12 +937,57 @@ except Exception:
     serial_dev=""
 }
 
+# ── SecureCRT 자동 붙여넣기 ──────────────────────────────────────────────
+_ftd_upgrade_confirm() {
+    local opts="${1:-}"
+    echo ""
+    echo -e "${_F_CYAN}  ╔════════════════════════════════════════╗${_F_RST}"
+    echo -e "${_F_CYAN}  ║  ▶  AP가 재부팅됩니다 — sysupgrade   ║${_F_RST}"
+    [ -n "$opts" ] && \
+    echo -e "${_F_CYAN}  ║     옵션: ${_F_WHITE}${opts}${_F_CYAN}                      ║${_F_RST}"
+    echo -e "${_F_CYAN}  ╚════════════════════════════════════════╝${_F_RST}"
+    echo -ne "  진행? [y/N]: "; read -r confirm
+    [[ "$confirm" =~ ^[yY]$ ]]
+}
+
+_ftd_find_crt_window() {
+    command -v xdotool &>/dev/null || return 1
+    local dev_hint
+    if [ "$FTD_SERIAL_DEV" != "auto" ] && [ "$FTD_SERIAL_DEV" != "off" ]; then
+        dev_hint=$(basename "$FTD_SERIAL_DEV" | tr '[:upper:]' '[:lower:]')
+    else
+        dev_hint="ttyusb"
+    fi
+    local first_wid="" first_title=""
+    while IFS= read -r wid; do
+        local title; title=$(xdotool getwindowname "$wid" 2>/dev/null)
+        [ -z "$first_wid" ] && first_wid="$wid" && first_title="$title"
+        echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint" \
+            && { _CRT_WINDOW_TITLE="$title"; echo "$wid"; return 0; }
+    done < <(xdotool search --name "SecureCRT" 2>/dev/null)
+    if [ -n "$first_wid" ]; then
+        _CRT_WINDOW_TITLE="$first_title"
+        echo "$first_wid"
+    fi
+}
+
+_ftd_crt_paste() {
+    local cmd="$1" wid="$2"
+    echo "$cmd" | xclip -selection clipboard 2>/dev/null || return 1
+    xdotool windowfocus --sync "$wid" 2>/dev/null
+    sleep 0.1
+    xdotool key --window "$wid" ctrl+shift+v 2>/dev/null
+    sleep 0.1
+    xdotool key --window "$wid" Return 2>/dev/null
+}
+
 # ── 시리얼 조작 ───────────────────────────────────────────────────────────
 _ftd_serial_login() {
     local dev="$1"
     python3 -c "
-import serial,time
-ser=serial.Serial('${dev}',115200,timeout=1)
+import serial,time,termios
+ser=serial.Serial('${dev}',115200,timeout=1,dsrdtr=False,rtscts=False,xonxoff=False)
+a=termios.tcgetattr(ser.fileno()); a[2]&=~termios.HUPCL; termios.tcsetattr(ser.fileno(),termios.TCSAFLUSH,a)
 time.sleep(0.3); ser.write(b'\r\n'); time.sleep(0.5)
 buf=ser.read(ser.in_waiting).decode('utf-8',errors='ignore')
 if 'login' in buf.lower():
@@ -942,8 +1001,9 @@ ser.close()
 _ftd_serial_wget() {
     local dev="$1" cmd="$2"
     python3 -c "
-import serial,time,sys
-ser=serial.Serial('${dev}',115200,timeout=1)
+import serial,time,sys,termios
+ser=serial.Serial('${dev}',115200,timeout=1,dsrdtr=False,rtscts=False,xonxoff=False)
+a=termios.tcgetattr(ser.fileno()); a[2]&=~termios.HUPCL; termios.tcsetattr(ser.fileno(),termios.TCSAFLUSH,a)
 time.sleep(0.3); ser.write(b'\r'); time.sleep(0.5); ser.read(ser.in_waiting)
 ser.write('${cmd}\r'.encode())
 out=''; start=time.time()
@@ -963,8 +1023,9 @@ print('WGET_OK' if ('100%' in out or 'saved' in out.lower()) else 'WGET_TIMEOUT'
 _ftd_serial_cmd() {
     local dev="$1" cmd="$2" wait="${3:-2}"
     python3 -c "
-import serial,time
-ser=serial.Serial('${dev}',115200,timeout=1)
+import serial,time,termios
+ser=serial.Serial('${dev}',115200,timeout=1,dsrdtr=False,rtscts=False,xonxoff=False)
+a=termios.tcgetattr(ser.fileno()); a[2]&=~termios.HUPCL; termios.tcsetattr(ser.fileno(),termios.TCSAFLUSH,a)
 ser.write(b'\r'); time.sleep(0.3)
 ser.write('${cmd}\r'.encode()); time.sleep(${wait}); ser.close()
 " 2>/dev/null

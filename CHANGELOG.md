@@ -64,6 +64,22 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.3.0] — 2026-04-03
+
+#### Added
+- `_ftd_find_crt_window()` — xdotool로 SecureCRT 창 자동 감지 (디바이스명 매칭 우선)
+- `_ftd_crt_paste()` — SecureCRT 창에 명령 자동 붙여넣기 (Ctrl+Shift+V)
+- `_ftd_upgrade_confirm()` — sysupgrade 확인 박스 top-level 함수
+- scan 파일 목록에 리비전 컬럼 표시 (`r123`)
+
+#### Changed
+- `_ftd_transfer`: CRT 창 → 시리얼 → 클립보드 순 fallback
+- `_ftd_detect_serial`: 고정 포트 목록 → `/dev/ttyUSB* /dev/ttyACM*` 와일드카드
+- Python serial: `termios` HUPCL 비활성화 — 포트 종료 시 연결 단절 방지
+- `_ftd_find_crt_window`: xdotool search 2회→1회, 타이틀 캐시
+
+---
+
 ### [2.2.0] — 2026-04-03
 
 #### 추가
