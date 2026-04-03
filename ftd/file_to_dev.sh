@@ -142,9 +142,8 @@ _ftd_init() {
             echo -ne "  FW 디렉토리 경로 (ex: ~/proj/13_1/bin/targets/ipq53xx/ipq53xx_32): "
             read -r new_fw_dir
             new_fw_dir="${new_fw_dir/#\~/$HOME}"
-            echo -ne "  TFTP 저장 파일명 (ex: fw_609h.img, Enter=firmware.img): "
+            echo -ne "  TFTP 저장 파일명 (ex: fw_609h.img, Enter=원본명 유지): "
             read -r new_fw_name
-            new_fw_name="${new_fw_name:-firmware.img}"
             echo -e "  ${_OK} path 모드 — ${_F_GREEN}${new_fw_dir}${_F_RST}"
             ;;
         3|*)
@@ -153,9 +152,8 @@ _ftd_init() {
             echo -ne "  탐색 루트 경로 (Enter=~/proj, 공백으로 다중 경로 가능): "
             read -r new_scan_dirs
             new_scan_dirs="${new_scan_dirs:-~/proj}"
-            echo -ne "  TFTP 저장 파일명 (ex: fw_609h.img, Enter=firmware.img): "
+            echo -ne "  TFTP 저장 파일명 (ex: fw_609h.img, Enter=원본명 유지): "
             read -r new_fw_name
-            new_fw_name="${new_fw_name:-firmware.img}"
             ;;
     esac
     echo ""
@@ -508,7 +506,7 @@ _ftd_up() {
                 # 인자 없이 호출 → 원본 파일명 유지 (send_file_to 688번 라인 참조)
                 send_file_to_tftp
                 [ $? -ne 0 ] && return 1
-                fw_copied_name=$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null | head -1 | xargs basename 2>/dev/null)
+                fw_copied_name=$(basename "$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null | head -1)")
             elif [ -n "${FW_DIR:-}" ] && [ -d "${FW_DIR:-}" ]; then
                 local src_file
                 if [ $do_select -eq 1 ]; then
@@ -564,9 +562,6 @@ _ftd_up() {
 }
 
 _ftd_do_copy() {
-    # 사용법: _ftd_do_copy <src_path> <dst_dir>
-    # FTD_FW_NAME 설정 시 rename, 비어있으면 원본명 유지
-    # stdout으로 복사된 파일명(basename)만 출력
     local src="$1" dst_dir="$2"
     local src_name; src_name=$(basename "$src")
     local dst_name="${FTD_FW_NAME:-$src_name}"
@@ -597,14 +592,12 @@ _ftd_file() {
 
 # ── scan 모드 파일 탐색 ───────────────────────────────────────────────────
 _ftd_scan_fw_files() {
-    # FTD_SCAN_DIRS(공백 구분)의 각 경로에서 .img 탐색
-    # build_dir / .git / .svn / node_modules 제외
-    # 출력 형식: "YYYY-MM-DD HH:MM  123M  /full/path/to/fw.img"
-    local results=""
+    local all_files=""
     for scan_root in $FTD_SCAN_DIRS; do
         scan_root="${scan_root/#\~/$HOME}"
         [ -d "$scan_root" ] || continue
         local found
+        # mtime(epoch) + bytes + path를 한 번에 수집 → sort → 표시 변환까지 단일 stat
         found=$(find "$scan_root" -maxdepth 7 -name "*.img" \
             -not -path '*/build_dir/*' \
             -not -path '*/.git/*' \
@@ -612,17 +605,21 @@ _ftd_scan_fw_files() {
             -not -path '*/node_modules/*' \
             2>/dev/null \
             | grep -v '_raw\|_single' \
-            | xargs -r stat --printf '%Y\t%n\n' 2>/dev/null \
-            | sort -rn | awk -F'\t' '{print $2}' | head -15)
-        [ -n "$found" ] && results+="${found}"$'\n'
+            | xargs -r stat --printf '%Y\t%s\t%n\n' 2>/dev/null)
+        [ -n "$found" ] && all_files+="${found}"$'\n'
     done
-    # 날짜+크기+경로 형식으로 변환 (fzf 표시용)
-    echo "$results" | grep -v '^$' | head -20 | while IFS= read -r f; do
-        [ -f "$f" ] || continue
-        local sz; sz=$(du -sh "$f" 2>/dev/null | awk '{print $1}')
-        local dt; dt=$(stat -c '%y' "$f" 2>/dev/null | cut -c1-16)
-        printf "%-16s  %-6s  %s\n" "$dt" "$sz" "$f"
-    done
+    # 전체 결과를 mtime 내림차순 정렬 후 출력 형식 변환 (stat 추가 호출 없음)
+    echo "$all_files" | grep -v '^$' | sort -rn | head -20 | \
+        awk -F'\t' '{
+            bytes=$2; path=$3
+            if (bytes>=1073741824) sz=sprintf("%.1fG", bytes/1073741824)
+            else if (bytes>=1048576) sz=sprintf("%.1fM", bytes/1048576)
+            else if (bytes>=1024) sz=sprintf("%.1fK", bytes/1024)
+            else sz=bytes"B"
+            cmd="date -d @"$1" +\"%Y-%m-%d %H:%M\""
+            cmd | getline dt; close(cmd)
+            printf "%-16s  %-6s  %s\n", dt, sz, path
+        }'
 }
 
 _ftd_fzf_scan() {
@@ -633,7 +630,7 @@ _ftd_fzf_scan() {
         selected=$(echo "$lines" | fzf --cycle --height 60% --reverse --border \
             --header "[ FW 파일 선택 — 날짜/크기/경로 | Esc=취소 ]" \
             --prompt "선택 > " \
-            --preview 'f=$(echo {} | awk "{print \$NF}"); echo "경로: $f"; ls -lh "$f" 2>/dev/null; echo ""; stat "$f" 2>/dev/null | grep Modify') || return 1
+            --preview $'f=$(awk \'{print $NF}\' <<< {}); echo "경로: $f"; ls -lh "$f" 2>/dev/null; echo ""; stat "$f" 2>/dev/null | grep Modify') || return 1
     else
         local arr; IFS=$'\n' read -r -d '' -a arr <<< "$lines" || true
         echo -e "${_F_YELLOW}[ FW 파일 선택 ]${_F_RST}" >&2
