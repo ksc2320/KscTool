@@ -10,10 +10,11 @@ LOG_PREFIX="[dotfiles-backup]"
 echo "$LOG_PREFIX $(date '+%Y-%m-%d %H:%M:%S') 시작"
 
 # ── bash ──────────────────────────────────────────────────
-cp -f "$HOME/.bashrc"        "$DEST/bash/.bashrc"
-cp -f "$HOME/.bash_aliases"  "$DEST/bash/.bash_aliases"
-cp -f "$HOME/.bash_profile"  "$DEST/bash/.bash_profile"
-cp -f "$HOME/.profile"       "$DEST/bash/.profile"
+cp -f "$HOME/.bashrc"           "$DEST/bash/.bashrc"
+cp -f "$HOME/.bash_aliases"     "$DEST/bash/.bash_aliases"
+cp -f "$HOME/.bash_functions"   "$DEST/bash/.bash_functions"
+cp -f "$HOME/.bash_profile"     "$DEST/bash/.bash_profile"
+cp -f "$HOME/.profile"          "$DEST/bash/.profile"
 
 # ── vim ───────────────────────────────────────────────────
 cp -f "$HOME/.vimrc"         "$DEST/vim/.vimrc"
