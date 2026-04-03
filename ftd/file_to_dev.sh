@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.0'
+FTD_VERSION='2.5.1'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1479,11 +1479,13 @@ _ftd_cmd() {
 
     if [ -n "$crt_wid" ]; then
         local crt_title; crt_title=$(xdotool getwindowname "$crt_wid" 2>/dev/null)
+        local my_wid; my_wid=$(xdotool getactivewindow 2>/dev/null)
         echo -e "${_RUN} CRT 자동 붙여넣기 ${_F_DIM}(${crt_title// - SecureCRT*/})${_F_RST}"
         for step in "${steps[@]}"; do
             _ftd_crt_paste "$step" "$crt_wid" || { echo -e "${_WARN} CRT 붙여넣기 실패"; return 1; }
             [ "${#steps[@]}" -gt 1 ] && sleep 0.4
         done
+        [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
         echo -e "${_OK} 전송 완료"
     else
         [ -n "$(command -v xdotool)" ] && echo -e "${_WARN} SecureCRT 창 없음 — 클립보드로 대체"
@@ -1597,6 +1599,14 @@ _ftd_register() {
     # 덕분에 send_file_to_tftp 등 bash 함수 사용 가능
     local a="${FTD_ALIAS:-ftd}"
     eval "alias ${a}='_ftd_main'"
+
+    # ap 함수 — preset 라우팅 포함 (ap preset → fwd preset, 나머지 → fwd cmd)
+    ap() {
+        case "${1:-}" in
+            preset) _ftd_main preset "${@:2}" ;;
+            *)      _ftd_cmd "$@" ;;
+        esac
+    }
 
     # dv 통합
     if [ "${FTD_DV_INTEGRATION:-off}" = "on" ] && declare -f davo_macro_tool &>/dev/null; then

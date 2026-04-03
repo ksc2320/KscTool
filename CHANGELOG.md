@@ -90,6 +90,15 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.1] — 2026-04-03
+
+#### Fixed
+- CRT paste 후 포커스가 SecureCRT에 머물던 문제 — `getactivewindow` 저장 후 완료 시 복귀
+- `ap preset` 명령이 AP에 전송되던 문제 — `ap()` 함수로 변경 (preset → `fwd preset`, 나머지 → `fwd cmd`)
+- `.bash_aliases`의 `ap` alias → `file_to_dev.sh _ftd_register()` 내 함수로 이동
+
+---
+
 ### [2.5.0] — 2026-04-03
 
 #### Added
