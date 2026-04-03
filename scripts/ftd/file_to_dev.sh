@@ -1068,10 +1068,16 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up [AP_IP]"  "AP IP 직접 지정 (ex: up 192.168.1.254)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "file"        "tftpboot 파일 fzf 선택 → AP wget"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "file <name>" "파일 지정 전송 (sysupgrade 없음)"
-    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "set"         "설정 편집 (IP·포트·시리얼 등)"
-    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "log"         "배포 이력 조회"
-    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "doctor"      "환경 진단 (패키지·설정·서버)"
-    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "help"        "이 도움말"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp <path>"  "로컬 파일 → tftpboot 복사"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp"         "fzf로 파일 선택 → tftpboot 복사"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp ."       "현재 디렉토리 .img/.bin/.zip 전부 복사"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cmd <명령>"  "AP에 임의 명령 전송 (시리얼/클립보드)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "clean"      "tftpboot 파일 정리 (fzf 다중 선택 삭제)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "set"        "설정 편집 (IP·포트·시리얼 등)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "log"        "배포 이력 조회"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "doctor"     "환경 진단 (패키지·설정·서버)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "help"       "이 도움말"
     echo ""
     echo -e "  ${_F_WHITE}FW 위치 모드 (${_F_YELLOW}${FTD_FW_MODE}${_F_RST}${_F_WHITE}):${_F_RST}"
     echo -e "  ${_F_DIM}dv   — dv 환경 (send_file_to_tftp) 사용${_F_RST}"
@@ -1094,6 +1100,149 @@ _ftd_help() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+#  CP — 로컬 파일 → tftpboot 복사
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_cp() {
+    _ftd_load_conf
+    local target="${1:-}"
+
+    if [ -z "$target" ]; then
+        # 인자 없음 → fzf로 파일 선택 (현재 디렉토리 기준)
+        echo -e "${_RUN} fzf로 복사할 파일 선택..."
+        target=$(find . -maxdepth 4 -type f 2>/dev/null \
+            | grep -v '\.git\|\.svn' \
+            | _ftd_fzf_select "[ tftpboot에 복사할 파일 선택 ]") || return 1
+        [ -z "$target" ] && return 0
+    fi
+
+    # 점(.) = 현재 디렉토리 .img 전부
+    if [ "$target" = "." ]; then
+        local count=0
+        for f in ./*.img ./*.bin ./*.zip; do
+            [ -f "$f" ] || continue
+            local dest="${FTD_TFTP_PATH}/$(basename "$f")"
+            cp -a "$f" "$dest" && echo -e "${_OK} $(basename "$f") → ${FTD_TFTP_PATH}" && (( count++ ))
+        done
+        [ $count -eq 0 ] && echo -e "${_WARN} 현재 디렉토리에 .img/.bin/.zip 없음"
+        return
+    fi
+
+    # 경로 확인
+    local src="${target/#\~/$HOME}"
+    if [ ! -f "$src" ]; then
+        echo -e "${_FAIL} 파일 없음: ${src}"
+        return 1
+    fi
+
+    local dest="${FTD_TFTP_PATH}/$(basename "$src")"
+    cp -a "$src" "$dest"
+    echo -e "${_OK} ${_F_GREEN}$(basename "$src")${_F_RST} → ${_F_UL}${FTD_TFTP_PATH}${_F_RST}"
+    echo -e "  ${_F_DIM}${dest}${_F_RST}"
+    echo -e "  ${_F_DIM}fwd file $(basename "$src")  으로 AP에 전송 가능${_F_RST}"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+#  CMD — AP에 임의 명령 전송 (시리얼 or 클립보드)
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_cmd() {
+    _ftd_load_conf
+    local cmd="${*}"
+
+    if [ -z "$cmd" ]; then
+        echo -ne "${_F_WHITE}AP에 전송할 명령: ${_F_RST}"
+        read -r cmd
+    fi
+    [ -z "$cmd" ] && return 0
+
+    # 시리얼 감지
+    local serial_dev=""
+    _ftd_detect_serial "$FTD_SERIAL_DEV"
+
+    echo ""
+    if [ -n "$serial_dev" ]; then
+        echo -e "${_RUN} 시리얼 전송 (${serial_dev}): ${_F_CYAN}${cmd}${_F_RST}"
+        _ftd_serial_cmd "$serial_dev" "$cmd" 1
+        echo -e "${_OK} 전송 완료"
+    else
+        echo -e "${_F_WHITE}  ┌─ 명령${_F_RST}"
+        echo -e "${_F_SKY}  │ ${cmd}${_F_RST}"
+        echo -e "${_F_WHITE}  └──────${_F_RST}"
+        echo "$cmd" | xclip -selection clipboard 2>/dev/null \
+            && echo -e "${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
+            || echo -e "${_WARN} xclip 없음 — 위 명령 수동 복사"
+    fi
+    echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+#  REBOOT — AP 재부팅
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_reboot() {
+    _ftd_load_conf
+    local ap_ip; ap_ip=$(_ftd_ap_ip)
+
+    echo ""
+    echo -e "${_WARN} ${_F_YELLOW}AP 재부팅 — ${ap_ip}${_F_RST}"
+    echo -ne "   진행? [y/N]: "; read -r confirm
+    [[ ! "$confirm" =~ ^[yY]$ ]] && return 0
+
+    _ftd_cmd "reboot"
+
+    echo -ne "${_F_DIM}   재부팅 대기"
+    sleep 3
+    _ftd_wait_boot "$ap_ip"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+#  CLEAN — tftpboot 오래된 파일 정리
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_clean() {
+    _ftd_load_conf
+    local tftp="$FTD_TFTP_PATH"
+
+    echo ""
+    echo -e "${_RUN} tftpboot 파일 목록 (${tftp})"
+    echo ""
+
+    # 현재 파일 목록
+    local files; files=$(ls -lhrt "$tftp" 2>/dev/null | grep -v '^total\|^d')
+    if [ -z "$files" ]; then
+        echo -e "  ${_F_DIM}파일 없음${_F_RST}"; echo ""; return
+    fi
+    echo "$files" | while IFS= read -r line; do
+        echo -e "  ${_F_DIM}${line}${_F_RST}"
+    done
+    echo ""
+
+    if ! command -v fzf &>/dev/null; then
+        echo -e "${_WARN} fzf 없음 — 수동으로 삭제하세요: ${_F_UL}${tftp}${_F_RST}"
+        return
+    fi
+
+    echo -e "  ${_F_DIM}삭제할 파일을 선택하세요 (Tab=다중선택, Esc=취소)${_F_RST}"
+    local to_delete
+    to_delete=$(ls "$tftp" 2>/dev/null | grep -v '^backup' \
+        | fzf --multi --cycle --height 50% --reverse --border \
+            --header "[ 삭제할 파일 — Tab 다중 선택, Esc 취소 ]" \
+            --prompt "삭제 > ")
+
+    [ -z "$to_delete" ] && echo -e "${_OK} 취소" && return
+
+    echo ""
+    echo -e "${_F_RED}삭제 대상:${_F_RST}"
+    echo "$to_delete" | while IFS= read -r f; do
+        echo -e "  ${_F_RED}✘ ${f}${_F_RST}"
+    done
+    echo -ne "   정말 삭제? [y/N]: "; read -r confirm
+    [[ ! "$confirm" =~ ^[yY]$ ]] && echo -e "${_OK} 취소" && return
+
+    echo "$to_delete" | while IFS= read -r f; do
+        rm -f "${tftp}/${f}" && echo -e "${_OK} 삭제: ${f}"
+    done
+    echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 #  dv 통합 — dv up / dv file 연결
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_dv_up() {
@@ -1108,9 +1257,13 @@ _ftd_dv_file() {
 
 function _dv_extended_ftd() {
     case "$1" in
-        up)   _ftd_dv_up "${@:2}" ;;
-        file) _ftd_dv_file "${@:2}" ;;
-        *)    davo_macro_tool "$@" ;;
+        up)     _ftd_dv_up "${@:2}" ;;
+        file)   _ftd_dv_file "${@:2}" ;;
+        cp)     _ftd_cp "${@:2}" ;;
+        cmd)    _ftd_cmd "${@:2}" ;;
+        reboot) _ftd_reboot ;;
+        clean)  _ftd_clean ;;
+        *)      davo_macro_tool "$@" ;;
     esac
 }
 
@@ -1134,14 +1287,18 @@ _ftd_register() {
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_main() {
     case "${1:-help}" in
-        init)    _ftd_init ;;
-        up)      _ftd_up "${@:2}" ;;
-        file)    _ftd_file "${@:2}" ;;
-        set)     _ftd_set ;;
-        log)     _ftd_log_show ;;
-        doctor)  _ftd_doctor ;;
+        init)         _ftd_init ;;
+        up)           _ftd_up "${@:2}" ;;
+        file)         _ftd_file "${@:2}" ;;
+        cp)           _ftd_cp "${@:2}" ;;
+        cmd)          _ftd_cmd "${@:2}" ;;
+        reboot)       _ftd_reboot ;;
+        clean)        _ftd_clean ;;
+        set)          _ftd_set ;;
+        log)          _ftd_log_show ;;
+        doctor)       _ftd_doctor ;;
         help|-h|--help) _ftd_help ;;
-        howto)   _ftd_howtoplay ;;
+        howto)        _ftd_howtoplay ;;
         *)
             echo -e "${_WARN} 알 수 없는 명령: $1"
             _ftd_help
