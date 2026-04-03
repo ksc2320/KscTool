@@ -8,7 +8,7 @@ DOTFILES_DIR="$KSCTOOL_DIR/dotfiles"
 PRIVATE_DIR="$HOME/.private"
 PERSONAL_CFG="$PRIVATE_DIR/personal.sh"
 
-cRed='\e[31m'; cGreen='\e[32m'; cYellow='\e[33m'
+cGreen='\e[32m'; cYellow='\e[33m'
 cSky='\e[36m'; cDim='\e[2m'; cBold='\e[1m'; cReset='\e[0m'
 
 _STEP=0; _TOTAL=3
@@ -26,7 +26,7 @@ _link() {
     if [[ ! -f "$src" ]]; then
         _warn "$name: dotfiles에 없음 — 건너뜀"; return
     fi
-    if [[ -L "$dst" && "$(readlink "$dst")" == "$src" ]]; then
+    if [[ -L "$dst" && "$dst" -ef "$src" ]]; then
         _skip "$name (이미 링크됨)"; return
     fi
     if [[ -f "$dst" && ! -L "$dst" ]]; then
@@ -108,7 +108,7 @@ fi
 
 if [[ -f "$PERSONAL_CFG" ]]; then
     _warn "기존 설정 있음: $PERSONAL_CFG"
-    local _yn=''
+    _yn=''
     _ask "다시 설정하시겠습니까? [y/N]:" _yn
     if [[ "${_yn:-N}" == "y" || "${_yn:-N}" == "Y" ]]; then
         _setup_personal
