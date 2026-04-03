@@ -497,10 +497,25 @@ _ftd_up() {
     case "$FTD_FW_MODE" in
         dv)
             if declare -f send_file_to_tftp &>/dev/null; then
+                # 현재 쉘에 dv 함수 있음 → 기존 루틴 그대로
                 send_file_to_tftp fw
                 [ $? -ne 0 ] && return 1
+            elif [ -n "${FW_DIR:-}" ] && [ -d "${FW_DIR:-}" ]; then
+                # 서브프로세스 실행이지만 $FW_DIR 환경변수는 있음 → 직접 복사
+                local src_file
+                if [ $do_select -eq 1 ]; then
+                    src_file=$(_ftd_pick_file "${FW_DIR}" "img") || return 1
+                else
+                    src_file=$(ls -t "${FW_DIR}"/*.img 2>/dev/null \
+                        | grep -v '_raw\|_single' | head -1)
+                fi
+                [ -z "$src_file" ] && echo -e "${_FAIL} ${FW_DIR} 에 .img 없음" && return 1
+                echo -e "${_F_DIM}   src: $(basename "$src_file")${_F_RST}"
+                _ftd_do_copy "$src_file" "${FTD_TFTP_PATH}/${FTD_FW_NAME}" || return 1
             else
-                echo -e "${_FAIL} dv 환경 없음 — FTD_FW_MODE 를 path 또는 scan 으로 변경"
+                echo -e "${_FAIL} dv 환경 없음 — ${_F_YELLOW}ftd set${_F_RST} 으로 FTD_FW_MODE 변경"
+                echo -e "${_F_DIM}   path: FTD_FW_DIR 직접 지정${_F_RST}"
+                echo -e "${_F_DIM}   scan: ~/proj/**/bin/*.img 자동 탐지${_F_RST}"
                 return 1
             fi
             ;;
@@ -1103,9 +1118,10 @@ function _dv_extended_ftd() {
 _ftd_register() {
     _ftd_load_conf
 
-    # ftd 함수 등록 (단축어 함수)
+    # alias로 등록 → 현재 쉘에서 직접 실행 (서브프로세스 X)
+    # 덕분에 send_file_to_tftp 등 bash 함수 사용 가능
     local a="${FTD_ALIAS:-ftd}"
-    eval "function ${a}() { \"${FTD_SELF}\" \"\$@\"; }"
+    eval "alias ${a}='_ftd_main'"
 
     # dv 통합
     if [ "${FTD_DV_INTEGRATION:-off}" = "on" ] && declare -f davo_macro_tool &>/dev/null; then
