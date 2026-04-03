@@ -44,6 +44,7 @@ FTD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURC
 FTD_FW_MODE='scan'       # dv / path / scan
 FTD_FW_DIR=''
 FTD_FW_NAME='firmware.img'
+FTD_SCAN_DIRS="$HOME/proj"   # scan 모드 탐색 루트 (공백 구분 다중 경로 가능)
 FTD_TFTP_PATH='/tftpboot'
 FTD_SERVER_IP='auto'
 FTD_HTTP_PORT='80'
@@ -148,7 +149,10 @@ _ftd_init() {
             ;;
         3|*)
             new_fw_mode="scan"
-            echo -e "  ${_OK} scan 모드 — ~/proj/**/bin/*.img 자동 탐지"
+            echo -e "  ${_OK} scan 모드"
+            echo -ne "  탐색 루트 경로 (Enter=~/proj, 공백으로 다중 경로 가능): "
+            read -r new_scan_dirs
+            new_scan_dirs="${new_scan_dirs:-~/proj}"
             echo -ne "  TFTP 저장 파일명 (ex: fw_609h.img, Enter=firmware.img): "
             read -r new_fw_name
             new_fw_name="${new_fw_name:-firmware.img}"
@@ -300,6 +304,9 @@ FTD_FW_MODE='${new_fw_mode}'
 
 # FTD_FW_MODE=path 일때 FW 디렉토리
 FTD_FW_DIR='${new_fw_dir:-}'
+
+# FTD_FW_MODE=scan 탐색 루트 (공백 구분 다중 경로)
+FTD_SCAN_DIRS='${new_scan_dirs:-~/proj}'
 
 # TFTP 저장 파일명 (FW를 tftp로 복사할 때)
 FTD_FW_NAME='${new_fw_name:-firmware.img}'
@@ -532,17 +539,15 @@ _ftd_up() {
             ;;
         scan|*)
             local candidates
-            candidates=$(find "$HOME/proj" -maxdepth 6 -name "*.img" \
-                -not -path '*/.git/*' -not -path '*/.svn/*' 2>/dev/null \
-                | grep -v '_raw\|_single' \
-                | xargs -r stat --printf '%Y %n\n' 2>/dev/null \
-                | sort -rn | awk '{print $2}' | head -10)
-            [ -z "$candidates" ] && echo -e "${_FAIL} ~/proj 하위에 .img 없음" && return 1
+            candidates=$(_ftd_scan_fw_files)
+            [ -z "$candidates" ] && \
+                echo -e "${_FAIL} .img 없음 (탐색 경로: ${FTD_SCAN_DIRS})" && \
+                echo -e "${_F_DIM}   ftd set → FTD_SCAN_DIRS 로 경로 추가${_F_RST}" && return 1
             local src_file
             if [ $do_select -eq 1 ] || [ "$(echo "$candidates" | wc -l)" -gt 1 ]; then
-                src_file=$(echo "$candidates" | _ftd_fzf_select "[ FW 파일 선택 ]") || return 1
+                src_file=$(_ftd_fzf_scan "$candidates") || return 1
             else
-                src_file=$(echo "$candidates" | head -1)
+                src_file=$(echo "$candidates" | head -1 | awk '{print $NF}')
             fi
             [ -z "$src_file" ] && return 0
             _ftd_do_copy "$src_file" "${FTD_TFTP_PATH}/${FTD_FW_NAME}" || return 1
@@ -582,6 +587,57 @@ _ftd_file() {
     fi
 
     _ftd_transfer --file "$target_file" "${extra_args[@]}"
+}
+
+# ── scan 모드 파일 탐색 ───────────────────────────────────────────────────
+_ftd_scan_fw_files() {
+    # FTD_SCAN_DIRS(공백 구분)의 각 경로에서 .img 탐색
+    # build_dir / .git / .svn / node_modules 제외
+    # 출력 형식: "YYYY-MM-DD HH:MM  123M  /full/path/to/fw.img"
+    local results=""
+    for scan_root in $FTD_SCAN_DIRS; do
+        scan_root="${scan_root/#\~/$HOME}"
+        [ -d "$scan_root" ] || continue
+        local found
+        found=$(find "$scan_root" -maxdepth 7 -name "*.img" \
+            -not -path '*/build_dir/*' \
+            -not -path '*/.git/*' \
+            -not -path '*/.svn/*' \
+            -not -path '*/node_modules/*' \
+            2>/dev/null \
+            | grep -v '_raw\|_single' \
+            | xargs -r stat --printf '%Y\t%n\n' 2>/dev/null \
+            | sort -rn | awk -F'\t' '{print $2}' | head -15)
+        [ -n "$found" ] && results+="${found}"$'\n'
+    done
+    # 날짜+크기+경로 형식으로 변환 (fzf 표시용)
+    echo "$results" | grep -v '^$' | head -20 | while IFS= read -r f; do
+        [ -f "$f" ] || continue
+        local sz; sz=$(du -sh "$f" 2>/dev/null | awk '{print $1}')
+        local dt; dt=$(stat -c '%y' "$f" 2>/dev/null | cut -c1-16)
+        printf "%-16s  %-6s  %s\n" "$dt" "$sz" "$f"
+    done
+}
+
+_ftd_fzf_scan() {
+    # scan 전용 fzf: 날짜+크기+경로 표시, 경로만 반환
+    local lines="$1"
+    local selected
+    if command -v fzf &>/dev/null; then
+        selected=$(echo "$lines" | fzf --cycle --height 60% --reverse --border \
+            --header "[ FW 파일 선택 — 날짜/크기/경로 | Esc=취소 ]" \
+            --prompt "선택 > " \
+            --preview 'f=$(echo {} | awk "{print \$NF}"); echo "경로: $f"; ls -lh "$f" 2>/dev/null; echo ""; stat "$f" 2>/dev/null | grep Modify') || return 1
+    else
+        local arr; IFS=$'\n' read -r -d '' -a arr <<< "$lines" || true
+        echo -e "${_F_YELLOW}[ FW 파일 선택 ]${_F_RST}" >&2
+        select item in "${arr[@]}" "취소"; do
+            [ "$item" = "취소" ] && return 0
+            [ -n "$item" ] && selected="$item" && break
+        done <&2
+    fi
+    [ -z "$selected" ] && return 0
+    echo "$selected" | awk '{print $NF}'
 }
 
 # ── fzf / select 파일 선택 헬퍼 ──────────────────────────────────────────
@@ -706,6 +762,8 @@ _ftd_transfer() {
     else
         # 클립보드 모드
         echo -e "${_F_YELLOW}  시리얼 사용 불가 → 클립보드 모드${_F_RST}"
+        [ -n "$_SERIAL_SKIP_REASON" ] && \
+            echo -e "  ${_F_DIM}  └ ${_SERIAL_SKIP_REASON}${_F_RST}"
         echo ""
         echo -e "${_F_WHITE}  ┌─ wget${_F_RST}"
         echo -e "${_F_SKY}  │ ${cmd_wget}${_F_RST}"
@@ -772,25 +830,51 @@ _ftd_print_dry() {
 }
 
 # ── 시리얼 감지 ───────────────────────────────────────────────────────────
+# 결과: serial_dev (경로) + _SERIAL_SKIP_REASON (실패 이유, 표시용)
 _ftd_detect_serial() {
     local target="$1"
     local candidates=()
-    if [ "$target" = "off" ]; then return; fi
+    _SERIAL_SKIP_REASON=""
+    if [ "$target" = "off" ]; then serial_dev=""; return; fi
     [ "$target" = "auto" ] \
         && candidates=(/dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyACM0) \
         || candidates=("$target")
 
+    local found_any=0
     for dev in "${candidates[@]}"; do
         [ -c "$dev" ] || continue
-        if python3 -c "
-import serial,sys
+        found_any=1
+        local rc
+        rc=$(python3 -c "
+import serial, sys, errno as E
 try:
-    s=serial.Serial('${dev}',115200,timeout=0.5); s.close(); sys.exit(0)
-except: sys.exit(1)
-" 2>/dev/null; then
-            serial_dev="$dev"; return 0
-        fi
+    s = serial.Serial('${dev}', 115200, timeout=0.5)
+    s.close()
+    print('OK')
+except serial.SerialException as e:
+    if hasattr(e, 'errno') and e.errno == E.EACCES:
+        print('EPERM')
+    elif hasattr(e, 'errno') and e.errno == E.EBUSY:
+        print('EBUSY')
+    else:
+        print('EFAIL')
+except Exception:
+    print('EFAIL')
+" 2>/dev/null)
+        case "$rc" in
+            OK)
+                serial_dev="$dev"; _SERIAL_SKIP_REASON=""; return 0 ;;
+            EPERM)
+                _SERIAL_SKIP_REASON="권한 없음 (${dev}) — sudo usermod -aG dialout \$USER 후 재로그인" ;;
+            EBUSY)
+                _SERIAL_SKIP_REASON="사용 중 (${dev}) — SecureCRT 등 다른 프로그램이 점유 중" ;;
+            *)
+                _SERIAL_SKIP_REASON="열기 실패 (${dev})" ;;
+        esac
     done
+    if [ $found_any -eq 0 ]; then
+        _SERIAL_SKIP_REASON="포트 없음 — USB 시리얼 어댑터 연결 확인"
+    fi
     serial_dev=""
 }
 
@@ -917,6 +1001,7 @@ _ftd_set() {
     local KEYS=(
         "FTD_FW_MODE|FW 위치 모드 (dv/path/scan)"
         "FTD_FW_DIR|FW 디렉토리 (path 모드)"
+        "FTD_SCAN_DIRS|scan 탐색 루트 (공백 구분 다중 경로)"
         "FTD_FW_NAME|TFTP 저장 파일명"
         "FTD_TFTP_PATH|TFTP/HTTP 루트 경로"
         "FTD_SERVER_IP|호스트 IP (auto=enx 감지)"
@@ -1026,14 +1111,30 @@ _ftd_doctor() {
 
     # 시리얼
     echo -e "  ${_F_WHITE}시리얼${_F_RST}"
+    printf "    %-20s " "dialout 그룹"
+    if id -nG 2>/dev/null | grep -qw dialout; then
+        echo -e "${_OK} $(id -un) 포함"
+    else
+        echo -e "${_FAIL} ${_F_RED}미포함${_F_RST} — ${_F_YELLOW}sudo usermod -aG dialout \$USER${_F_RST} 후 재로그인"
+    fi
     for d in /dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2; do
         printf "    %-20s " "$d"
         if [ ! -c "$d" ]; then echo -e "${_F_DIM}없음${_F_RST}"; continue; fi
-        if python3 -c "import serial,sys; s=serial.Serial('${d}',115200,timeout=0.3); s.close()" 2>/dev/null; then
-            echo -e "${_OK} 열림 가능"
-        else
-            echo -e "${_WARN} 잠김 (SecureCRT 사용 중)"
-        fi
+        local rc
+        rc=$(python3 -c "
+import serial, sys, errno as E
+try:
+    s = serial.Serial('${d}', 115200, timeout=0.3); s.close(); print('OK')
+except serial.SerialException as e:
+    print('EPERM' if getattr(e,'errno',0)==E.EACCES else 'EBUSY' if getattr(e,'errno',0)==E.EBUSY else 'EFAIL')
+except: print('EFAIL')
+" 2>/dev/null)
+        case "$rc" in
+            OK)    echo -e "${_OK} 열림 가능" ;;
+            EPERM) echo -e "${_FAIL} ${_F_RED}권한 없음${_F_RST} — dialout 그룹 추가 필요" ;;
+            EBUSY) echo -e "${_WARN} 사용 중 (다른 프로그램 점유)" ;;
+            *)     echo -e "${_WARN} 응답 없음" ;;
+        esac
     done
     echo ""
 
