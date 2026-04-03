@@ -90,6 +90,20 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.6] — 2026-04-03
+
+#### Added
+- `FTD_CRT_PASTE_MODE` — CRT 명령 전송 방식 선택: `type` (xdotool 직접 입력, 기본) / `clip` (클립보드 + Ctrl+Shift+V, Plan B)
+- `init` [7/9] 스텝: 전송 방식 선택 → config에 자동 저장
+
+#### Changed
+- `_ftd_find_crt_window`: `clip` 모드 시 xwininfo child 탐색 스킵 (parent 창으로 충분)
+- `_ftd_find_crt_window`: `resolved_wid` 중간 변수로 루프 변수 재할당 제거 (simplify)
+- `_ftd_find_crt_window`: `grep -m1` 으로 head -1 서브프로세스 제거 (simplify)
+- `_ftd_crt_paste`: `clip` 모드 시 xclip/xsel → Ctrl+Shift+V 경로 분기
+
+---
+
 ### [2.5.2] — 2026-04-03
 
 #### Added

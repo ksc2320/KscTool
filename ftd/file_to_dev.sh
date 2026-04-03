@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.5'
+FTD_VERSION='2.5.6'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -84,6 +84,7 @@ FTD_MANAGE_HTTP='off'
 FTD_SYSUPGRADE_OPTS=''
 FTD_DV_INTEGRATION='auto'
 FTD_ALIAS='ftd'
+FTD_CRT_PASTE_MODE='type'
 
 # ── conf 로드 ─────────────────────────────────────────────────────────────
 _ftd_load_conf() {
@@ -125,7 +126,7 @@ _ftd_init() {
     mkdir -p "$FTD_CONF_DIR"
 
     # ── [1/8] 패키지 확인 ─────────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[1/8]${_F_RST} 필수 패키지 확인..."
+    echo -e "${_RUN} ${_F_BOLD}[1/9]${_F_RST} 필수 패키지 확인..."
     echo ""
     _ftd_check_pkg python3  "Python 3"
     _ftd_check_pkg pip3     "pip3"         "python3-pip"
@@ -137,7 +138,7 @@ _ftd_init() {
     echo ""
 
     # ── [2/8] FW 경로 모드 ────────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[2/8]${_F_RST} FW(펌웨어) 파일 위치 설정"
+    echo -e "${_RUN} ${_F_BOLD}[2/9]${_F_RST} FW(펌웨어) 파일 위치 설정"
     echo ""
     echo -e "  ${_F_WHITE}FW 파일을 어떻게 찾을까요?${_F_RST}"
     echo -e "  ${_F_CYAN}1)${_F_RST} dv 환경 사용  ${_F_DIM}(dv cp 처럼 동작 — davolink 개발환경)${_F_RST}"
@@ -187,7 +188,7 @@ _ftd_init() {
     echo ""
 
     # ── [3/8] TFTP 경로 ───────────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[3/8]${_F_RST} TFTP/HTTP 서버 루트 경로"
+    echo -e "${_RUN} ${_F_BOLD}[3/9]${_F_RST} TFTP/HTTP 서버 루트 경로"
     echo -e "  ${_F_DIM}AP가 wget으로 파일을 가져올 HTTP 서버의 파일 루트입니다.${_F_RST}"
     echo -ne "  경로 (Enter=/tftpboot): "
     read -r new_tftp
@@ -196,7 +197,7 @@ _ftd_init() {
     echo ""
 
     # ── [4/8] 서버 IP / 포트 ──────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[4/8]${_F_RST} 호스트(서버) IP & HTTP 포트"
+    echo -e "${_RUN} ${_F_BOLD}[4/9]${_F_RST} 호스트(서버) IP & HTTP 포트"
     echo -e "  ${_F_DIM}AP에서 wget할 때 사용할 이 PC의 IP입니다.${_F_RST}"
     if [ -n "$_DETECTED_HOST_IP" ]; then
         echo -e "  ${_F_DIM}enx 인터페이스 감지: ${_DETECTED_HOST_IP}${_F_RST}"
@@ -212,7 +213,7 @@ _ftd_init() {
     echo ""
 
     # ── [5/8] HTTP 서버 관리 방식 ─────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[5/8]${_F_RST} HTTP 서버 관리 방식"
+    echo -e "${_RUN} ${_F_BOLD}[5/9]${_F_RST} HTTP 서버 관리 방식"
     echo ""
     echo -e "  ${_F_CYAN}1)${_F_RST} off   ${_F_DIM}상시 켜진 서버 사용 (건드리지 않음) ← 권장${_F_RST}"
     echo -e "  ${_F_CYAN}2)${_F_RST} auto  ${_F_DIM}없으면 자동 시작, 있으면 그대로 사용${_F_RST}"
@@ -229,7 +230,7 @@ _ftd_init() {
     echo ""
 
     # ── [6/8] 시리얼 포트 ─────────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[6/8]${_F_RST} 시리얼 포트 설정"
+    echo -e "${_RUN} ${_F_BOLD}[6/9]${_F_RST} 시리얼 포트 설정"
     echo -e "  ${_F_DIM}AP 시리얼 콘솔로 wget 명령을 자동 전송합니다.${_F_RST}"
     echo -e "  ${_F_DIM}SecureCRT가 포트를 점유하면 클립보드 모드로 자동 전환됩니다.${_F_RST}"
     echo ""
@@ -266,8 +267,24 @@ _ftd_init() {
     echo -e "  ${_OK} 시리얼: ${_F_GREEN}${new_serial}${_F_RST}"
     echo ""
 
-    # ── [7/8] 자동 로그인 ─────────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[7/8]${_F_RST} AP 자동 로그인"
+    # ── [7/9] CRT 명령 전송 방식 ──────────────────────────────────────
+    echo -e "${_RUN} ${_F_BOLD}[7/9]${_F_RST} SecureCRT 명령 전송 방식"
+    echo ""
+    echo -e "  ${_F_WHITE}AP에 명령을 어떻게 전송할까요?${_F_RST}"
+    echo -e "  ${_F_CYAN}1)${_F_RST} type  ${_F_DIM}xdotool type — 직접 입력 ${_F_GREEN}(권장)${_F_RST}"
+    echo -e "  ${_F_CYAN}2)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+Shift+V — type이 안 될 때 (Plan B)${_F_RST}"
+    echo -ne "  선택 (Enter=1): "
+    read -r paste_mode_sel
+    local new_paste_mode
+    case "${paste_mode_sel:-1}" in
+        2) new_paste_mode="clip" ;;
+        *) new_paste_mode="type" ;;
+    esac
+    echo -e "  ${_OK} ${_F_GREEN}${new_paste_mode}${_F_RST}"
+    echo ""
+
+    # ── [8/9] 자동 로그인 ─────────────────────────────────────────────
+    echo -e "${_RUN} ${_F_BOLD}[8/9]${_F_RST} AP 자동 로그인"
     echo -e "  ${_F_DIM}AP에 이미 로그인되어 있으면 off 권장.${_F_RST}"
     echo -ne "  자동 로그인 (on/off, Enter=off): "
     read -r new_login
@@ -286,8 +303,8 @@ _ftd_init() {
     fi
     echo ""
 
-    # ── [8/8] 단축어 등록 ─────────────────────────────────────────────
-    echo -e "${_RUN} ${_F_BOLD}[8/8]${_F_RST} 단축어(alias) 등록"
+    # ── [9/9] 단축어 등록 ─────────────────────────────────────────────
+    echo -e "${_RUN} ${_F_BOLD}[9/9]${_F_RST} 단축어(alias) 등록"
     echo ""
     echo -e "  ${_F_WHITE}추천 단축어:${_F_RST}"
     echo -e "  ${_F_CYAN}ftd${_F_RST}  ${_F_DIM}— file to dev (전용)${_F_RST}"
@@ -365,6 +382,9 @@ FTD_SYSUPGRADE_OPTS=''
 
 # dv 명령 통합: on / off
 FTD_DV_INTEGRATION='${new_dv_integration}'
+
+# CRT 명령 전송 방식: type (xdotool 직접 입력, 권장) / clip (클립보드 Ctrl+Shift+V)
+FTD_CRT_PASTE_MODE='${new_paste_mode}'
 
 # 등록된 단축어
 FTD_ALIAS='${new_alias}'
@@ -966,17 +986,18 @@ _ftd_find_crt_window() {
         local title; title=$(xdotool getwindowname "$wid" 2>/dev/null)
         [ -z "$first_wid" ] && first_wid="$wid" && first_title="$title"
         if echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
-            # SecureCRT는 frame(parent)과 terminal widget(child)이 분리됨.
+            local resolved_wid="$wid"
             # xdotool type은 실제 입력을 받는 child로 보내야 동작함.
-            local hex_child
-            hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
-                | grep -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
-                | grep -oP '0x[0-9a-f]+' | head -1)
-            if [ -n "$hex_child" ]; then
-                wid=$(printf '%d' "$hex_child")
+            # clip 모드(Ctrl+Shift+V)는 parent 창으로 충분 — child 탐색 불필요.
+            if [ "${FTD_CRT_PASTE_MODE:-type}" != "clip" ]; then
+                local hex_child
+                hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
+                    | grep -m1 -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
+                    | grep -oP '0x[0-9a-f]+')
+                [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
             fi
             _CRT_WINDOW_TITLE="$title"
-            echo "$wid"
+            echo "$resolved_wid"
             return 0
         fi
     done < <(xdotool search --name "SecureCRT" 2>/dev/null)
@@ -1004,10 +1025,24 @@ _ftd_crt_key() {
 _ftd_crt_paste() {
     local cmd="$1" wid="$2"
     xdotool windowraise "$wid" 2>/dev/null
-    xdotool windowfocus --sync "$wid" 2>/dev/null
-    sleep 0.2
-    xdotool type --clearmodifiers --delay 20 --window "$wid" "$cmd" 2>/dev/null
-    sleep 0.05
+    if [ "${FTD_CRT_PASTE_MODE:-type}" = "clip" ]; then
+        # Plan B: 클립보드 복사 후 Ctrl+Shift+V 붙여넣기
+        if command -v xclip &>/dev/null; then
+            printf '%s' "$cmd" | xclip -selection clipboard 2>/dev/null
+        elif command -v xsel &>/dev/null; then
+            printf '%s' "$cmd" | xsel --clipboard --input 2>/dev/null
+        fi
+        xdotool windowfocus --sync "$wid" 2>/dev/null
+        sleep 0.2
+        xdotool key --clearmodifiers --window "$wid" ctrl+shift+v 2>/dev/null
+        sleep 0.1
+    else
+        # Plan A: xdotool type 직접 입력 (기본)
+        xdotool windowfocus --sync "$wid" 2>/dev/null
+        sleep 0.2
+        xdotool type --clearmodifiers --delay 20 --window "$wid" "$cmd" 2>/dev/null
+        sleep 0.05
+    fi
     xdotool key --clearmodifiers --window "$wid" Return 2>/dev/null
 }
 
