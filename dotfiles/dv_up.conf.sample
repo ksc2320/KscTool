@@ -1,0 +1,39 @@
+# ============================================================
+#  ~/.dv_up.conf — dv up / dv file 설정
+#  dv up set 으로 편집 가능
+# ============================================================
+
+# HTTP/TFTP 서버 루트 경로
+DVUP_TFTP_PATH='/tftpboot'
+
+# 호스트 IP (AP의 wget URL에 사용)
+# auto = enx 인터페이스 IP 자동 감지
+DVUP_SERVER_IP='172.17.122.123'
+
+# HTTP 서버 포트
+DVUP_HTTP_PORT='80'
+
+# AP IP
+# auto = enx 인터페이스 기반 .254 자동 감지
+DVUP_AP_IP='auto'
+
+# 시리얼 디바이스
+# auto = /dev/ttyUSB0 → 1 → 2 순 자동 탐색 (잠겨있으면 다음으로)
+# /dev/ttyUSBx = 특정 포트 고정
+# off = 클립보드 모드 강제
+DVUP_SERIAL_DEV='auto'
+
+# 자동 로그인 (on/off)
+# off = 로그인 건드리지 않음 (AP에서 이미 로그인 유지 가정)
+# on  = wget 전 로그인 시퀀스 자동 실행
+DVUP_AUTO_LOGIN='off'
+DVUP_LOGIN_USER='root'
+DVUP_LOGIN_PASS=''
+
+# HTTP 서버 직접 관리
+# off = 이미 실행 중인 서버 사용 (접근 불가 시 에러)
+# on  = 서버 없으면 자동 시작
+DVUP_MANAGE_HTTP='off'
+
+# sysupgrade 기본 옵션 (ex: -n 으로 항상 설정 초기화)
+DVUP_SYSUPGRADE_OPTS=''
