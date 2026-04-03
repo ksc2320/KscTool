@@ -90,6 +90,17 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.0] — 2026-04-03
+
+#### Added
+- preset 시스템 (`~/.devtools/ftd/presets`) — `fwd preset set/rm/list`
+- `ap` alias — `fwd cmd` 단축어
+- `_ftd_cmd`: 다단계 명령 지원 (`cmd1|cmd2|cmd3`)
+- `_ftd_cmd`: xdotool 미설치 시 명확한 오류 및 설치 힌트 출력
+- doctor/init: xdotool 패키지 체크 추가
+
+---
+
 ### [2.4.1] — 2026-04-03
 
 #### Fixed

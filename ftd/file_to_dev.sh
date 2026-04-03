@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.4.1'
+FTD_VERSION='2.5.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -64,6 +64,7 @@ _banner() {
 FTD_CONF_DIR="$HOME/.devtools/ftd"
 FTD_CONF="${FTD_CONF_DIR}/config"
 FTD_LOG="${FTD_CONF_DIR}/history.log"
+FTD_PRESET_FILE="${FTD_CONF_DIR}/presets"
 FTD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 
 # ── 기본값 (conf 없을 때 fallback) ───────────────────────────────────────
@@ -130,6 +131,7 @@ _ftd_init() {
     _ftd_check_pkg pip3     "pip3"         "python3-pip"
     _ftd_check_pkg fzf      "fzf (파일 선택기)"
     _ftd_check_pkg xclip    "xclip (클립보드)"
+    _ftd_check_pkg xdotool  "xdotool (CRT 자동 붙여넣기)"
     _ftd_check_pkg curl     "curl"
     _ftd_check_pyserial
     echo ""
@@ -1207,9 +1209,16 @@ _ftd_doctor() {
 
     # 패키지
     echo -e "  ${_F_WHITE}패키지${_F_RST}"
-    for cmd in python3 fzf xclip curl pip3; do
+    for cmd in python3 fzf xclip xdotool curl pip3; do
         printf "    %-12s" "$cmd"
-        command -v "$cmd" &>/dev/null && echo -e "${_OK}" || echo -e "${_FAIL} 없음"
+        if command -v "$cmd" &>/dev/null; then
+            echo -e "${_OK}"
+        else
+            case "$cmd" in
+                xdotool) echo -e "${_FAIL} 없음  ${_F_DIM}sudo apt install xdotool${_F_RST}" ;;
+                *)        echo -e "${_FAIL} 없음" ;;
+            esac
+        fi
     done
     printf "    %-12s" "pyserial"
     python3 -c "import serial" &>/dev/null && echo -e "${_OK}" || echo -e "${_FAIL} 없음"
@@ -1291,7 +1300,8 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp <path>"  "로컬 파일 → tftpboot 복사"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp"         "fzf로 파일 선택 → tftpboot 복사"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp ."       "현재 디렉토리 .img/.bin/.zip 전부 복사"
-    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cmd <명령>"  "AP에 임의 명령 전송 (시리얼/클립보드)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cmd <명령>"  "AP에 임의 명령 전송 (CRT 자동붙여넣기/클립보드)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "preset"     "상용구 관리 (list/set/rm)  →  ap <이름> 으로 호출"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "clean"      "tftpboot 파일 정리 (fzf 다중 선택 삭제)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "set"        "설정 편집 (IP·포트·시리얼 등)"
@@ -1362,11 +1372,76 @@ _ftd_cp() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
-#  CMD — AP에 임의 명령 전송 (시리얼 or 클립보드)
+#  PRESET — 상용구 관리 (ap.sh 스타일 단축 명령)
+#  저장: ~/.devtools/ftd/presets  (name=command, | 로 다단계 구분)
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_preset_get() {
+    local name="$1"
+    [ -f "$FTD_PRESET_FILE" ] || return 1
+    grep -m1 "^${name}=" "$FTD_PRESET_FILE" | cut -d= -f2-
+}
+
+_ftd_preset_list() {
+    echo ""
+    echo -e "  ${_F_WHITE}상용구 목록${_F_RST} ${_F_DIM}(${FTD_PRESET_FILE})${_F_RST}"
+    echo ""
+    if [ ! -f "$FTD_PRESET_FILE" ] || [ ! -s "$FTD_PRESET_FILE" ]; then
+        echo -e "  ${_F_DIM}(없음)  fwd preset set <이름> <명령>  으로 추가${_F_RST}"
+    else
+        while IFS='=' read -r name val; do
+            [[ "$name" =~ ^[[:space:]]*# ]] && continue
+            [ -z "$name" ] && continue
+            printf "  ${_F_CYAN}ap %-14s${_F_RST} %s\n" "$name" "${val//|/ → }"
+        done < "$FTD_PRESET_FILE"
+    fi
+    echo ""
+    echo -e "  ${_F_DIM}등록: fwd preset set <이름> <명령>   다단계: cmd1|cmd2|cmd3${_F_RST}"
+    echo -e "  ${_F_DIM}삭제: fwd preset rm  <이름>${_F_RST}"
+    echo ""
+}
+
+_ftd_preset_set() {
+    local name="${1:?이름 필요}"; shift
+    local val="$*"
+    [ -z "$val" ] && { echo -e "${_FAIL} 명령이 없습니다"; return 1; }
+    mkdir -p "$FTD_CONF_DIR"
+    touch "$FTD_PRESET_FILE"
+    sed -i "/^${name}=/d" "$FTD_PRESET_FILE"
+    echo "${name}=${val}" >> "$FTD_PRESET_FILE"
+    echo -e "${_OK} 상용구 저장: ${_F_CYAN}ap ${name}${_F_RST}  →  ${val//|/ → }"
+}
+
+_ftd_preset_rm() {
+    local name="${1:?이름 필요}"
+    [ -f "$FTD_PRESET_FILE" ] || { echo -e "${_WARN} 상용구 없음"; return; }
+    sed -i "/^${name}=/d" "$FTD_PRESET_FILE"
+    echo -e "${_OK} 상용구 삭제: ${name}"
+}
+
+_ftd_preset_main() {
+    _ftd_load_conf
+    case "${1:-list}" in
+        list)       _ftd_preset_list ;;
+        set)        _ftd_preset_set "${@:2}" ;;
+        rm|del)     _ftd_preset_rm "${2:?이름 필요}" ;;
+        *)          echo -e "${_WARN} 사용법: fwd preset  list | set <이름> <명령> | rm <이름>" ;;
+    esac
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+#  CMD — AP에 명령 전송 (CRT 자동 붙여넣기 / 클립보드 fallback)
+#  시리얼 포트 미접촉 — HUPCL SecureCRT 재연결 원천 차단
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_cmd() {
     _ftd_load_conf
-    local cmd="${*}"
+    local raw="${*}"
+
+    # preset 확인 (단어 단위 매칭)
+    local cmd="$raw"
+    if [ -n "$raw" ]; then
+        local preset_val; preset_val=$(_ftd_preset_get "$raw")
+        [ -n "$preset_val" ] && cmd="$preset_val"
+    fi
 
     if [ -z "$cmd" ]; then
         echo -ne "${_F_WHITE}AP에 전송할 명령: ${_F_RST}"
@@ -1374,26 +1449,51 @@ _ftd_cmd() {
     fi
     [ -z "$cmd" ] && return 0
 
-    # 시리얼 포트를 건드리지 않음 — CRT paste 또는 클립보드만 사용
+    # xdotool 설치 확인
+    if ! command -v xdotool &>/dev/null; then
+        echo ""
+        echo -e "${_WARN} ${_F_YELLOW}xdotool 미설치 — CRT 자동 붙여넣기 불가${_F_RST}"
+        echo -e "  ${_F_DIM}설치: sudo apt install xdotool${_F_RST}"
+        echo ""
+    fi
+
+    # CRT 창 감지 (시리얼 포트 미접촉)
     local crt_wid=""
     crt_wid=$(_ftd_find_crt_window)
 
+    # 다단계 명령 파싱 (| 구분)
+    IFS='|' read -ra steps <<< "$cmd"
+
     echo ""
-    echo -e "${_F_WHITE}  ┌─ 명령${_F_RST}"
-    echo -e "${_F_SKY}  │ ${cmd}${_F_RST}"
-    echo -e "${_F_WHITE}  └──────${_F_RST}"
+    if [ "${#steps[@]}" -gt 1 ]; then
+        echo -e "${_F_WHITE}  다단계 상용구 (${_F_CYAN}${#steps[@]}${_F_WHITE}단계):${_F_RST}"
+        for i in "${!steps[@]}"; do
+            printf "  ${_F_DIM}[%d]${_F_RST} ${_F_SKY}%s${_F_RST}\n" "$((i+1))" "${steps[$i]}"
+        done
+    else
+        echo -e "${_F_WHITE}  ┌─ 명령${_F_RST}"
+        echo -e "${_F_SKY}  │ ${cmd}${_F_RST}"
+        echo -e "${_F_WHITE}  └──────${_F_RST}"
+    fi
     echo ""
 
     if [ -n "$crt_wid" ]; then
-        local title="${_CRT_WINDOW_TITLE// - SecureCRT*/}"
-        echo -e "${_RUN} CRT 자동 붙여넣기 ${_F_DIM}(${title})${_F_RST}"
-        _ftd_crt_paste "$cmd" "$crt_wid" \
-            && echo -e "${_OK} 전송 완료" \
-            || echo -e "${_WARN} CRT 붙여넣기 실패 — 수동 입력 필요"
+        local crt_title; crt_title=$(xdotool getwindowname "$crt_wid" 2>/dev/null)
+        echo -e "${_RUN} CRT 자동 붙여넣기 ${_F_DIM}(${crt_title// - SecureCRT*/})${_F_RST}"
+        for step in "${steps[@]}"; do
+            _ftd_crt_paste "$step" "$crt_wid" || { echo -e "${_WARN} CRT 붙여넣기 실패"; return 1; }
+            [ "${#steps[@]}" -gt 1 ] && sleep 0.4
+        done
+        echo -e "${_OK} 전송 완료"
     else
-        echo "$cmd" | xclip -selection clipboard 2>/dev/null \
-            && echo -e "${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
-            || echo -e "${_WARN} xclip 없음 — 위 명령 수동 복사"
+        [ -n "$(command -v xdotool)" ] && echo -e "${_WARN} SecureCRT 창 없음 — 클립보드로 대체"
+        for step in "${steps[@]}"; do
+            [ "${#steps[@]}" -gt 1 ] && echo -e "${_F_DIM}  → ${step}${_F_RST}"
+            echo "$step" | xclip -selection clipboard 2>/dev/null \
+                && echo -e "  ${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
+                || echo -e "  ${_WARN} xclip 없음 — 위 명령 수동 복사"
+            [ "${#steps[@]}" -gt 1 ] && { echo -ne "  다음 단계 Enter... "; read -r; }
+        done
     fi
     echo ""
 }
@@ -1514,6 +1614,7 @@ _ftd_main() {
         file)         _ftd_file "${@:2}" ;;
         cp)           _ftd_cp "${@:2}" ;;
         cmd)          _ftd_cmd "${@:2}" ;;
+        preset)       _ftd_preset_main "${@:2}" ;;
         reboot)       _ftd_reboot ;;
         clean)        _ftd_clean ;;
         set)          _ftd_set ;;

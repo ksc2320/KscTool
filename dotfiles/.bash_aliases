@@ -260,6 +260,7 @@ alias scs="$HOME/KscTool/svn/svn_commit.sh"
 ##ftd (AP 파일 전송)
 alias fwd='_ftd_main'
 alias fwdc='fwd cmd'
+alias ap='fwd cmd'
 ##cpbak (SVN/Git 수정 파일 백업)
 alias cpbak='_cpbak_main'
 ##build — 비활성화 (동작 안함)
