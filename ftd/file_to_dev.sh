@@ -43,7 +43,7 @@ FTD_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURC
 # ── 기본값 (conf 없을 때 fallback) ───────────────────────────────────────
 FTD_FW_MODE='scan'       # dv / path / scan
 FTD_FW_DIR=''
-FTD_FW_NAME='firmware.img'
+FTD_FW_NAME=''           # 빈 문자열=원본명 유지, 고정명 원하면 ex: fw_609h.img
 FTD_SCAN_DIRS="$HOME/proj"   # scan 모드 탐색 루트 (공백 구분 다중 경로 가능)
 FTD_TFTP_PATH='/tftpboot'
 FTD_SERVER_IP='auto'
@@ -308,8 +308,8 @@ FTD_FW_DIR='${new_fw_dir:-}'
 # FTD_FW_MODE=scan 탐색 루트 (공백 구분 다중 경로)
 FTD_SCAN_DIRS='${new_scan_dirs:-~/proj}'
 
-# TFTP 저장 파일명 (FW를 tftp로 복사할 때)
-FTD_FW_NAME='${new_fw_name:-firmware.img}'
+# TFTP 저장 파일명 (빈 문자열=원본명 유지, ex: fw_609h.img 으로 고정 시 지정)
+FTD_FW_NAME='${new_fw_name:-}'
 
 # TFTP/HTTP 서버 루트 경로
 FTD_TFTP_PATH='${new_tftp}'
@@ -500,23 +500,16 @@ _ftd_up() {
     echo ""
     echo -e "${_RUN} ${_F_BOLD}[1/3]${_F_RST} FW 파일 → ${_F_UL}${FTD_TFTP_PATH}${_F_RST} 복사"
 
-    local fw_copied_name="$FTD_FW_NAME"
+    local fw_copied_name=""
 
     case "$FTD_FW_MODE" in
         dv)
             if declare -f send_file_to_tftp &>/dev/null; then
-                # 현재 쉘에 dv 함수 있음 → 기존 루틴 그대로
-                # 복사 전 tftp 파일 목록을 스냅샷 → 복사 후 새 파일 감지
-                local _pre_snap; _pre_snap=$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null)
-                send_file_to_tftp fw
+                # 인자 없이 호출 → 원본 파일명 유지 (send_file_to 688번 라인 참조)
+                send_file_to_tftp
                 [ $? -ne 0 ] && return 1
-                # send_file_to_tftp가 사용한 실제 파일명 감지
-                local _post_newest; _post_newest=$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null | head -1)
-                if [ -n "$_post_newest" ]; then
-                    fw_copied_name=$(basename "$_post_newest")
-                fi
+                fw_copied_name=$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null | head -1 | xargs basename 2>/dev/null)
             elif [ -n "${FW_DIR:-}" ] && [ -d "${FW_DIR:-}" ]; then
-                # 서브프로세스 실행이지만 $FW_DIR 환경변수는 있음 → 직접 복사
                 local src_file
                 if [ $do_select -eq 1 ]; then
                     src_file=$(_ftd_pick_file "${FW_DIR}" "img") || return 1
@@ -525,12 +518,11 @@ _ftd_up() {
                         | grep -v '_raw\|_single' | head -1)
                 fi
                 [ -z "$src_file" ] && echo -e "${_FAIL} ${FW_DIR} 에 .img 없음" && return 1
-                echo -e "${_F_DIM}   src: $(basename "$src_file")${_F_RST}"
-                _ftd_do_copy "$src_file" "${FTD_TFTP_PATH}/${FTD_FW_NAME}" || return 1
+                fw_copied_name=$(_ftd_do_copy "$src_file" "${FTD_TFTP_PATH}") || return 1
             else
                 echo -e "${_FAIL} dv 환경 없음 — ${_F_YELLOW}ftd set${_F_RST} 으로 FTD_FW_MODE 변경"
                 echo -e "${_F_DIM}   path: FTD_FW_DIR 직접 지정${_F_RST}"
-                echo -e "${_F_DIM}   scan: ~/proj/**/bin/*.img 자동 탐지${_F_RST}"
+                echo -e "${_F_DIM}   scan: FTD_SCAN_DIRS 자동 탐지${_F_RST}"
                 return 1
             fi
             ;;
@@ -539,10 +531,10 @@ _ftd_up() {
             if [ $do_select -eq 1 ]; then
                 src_file=$(_ftd_pick_file "${FTD_FW_DIR}" "img") || return 1
             else
-                src_file=$(ls -t "${FTD_FW_DIR}"/*.img 2>/dev/null | head -1)
+                src_file=$(ls -t "${FTD_FW_DIR}"/*.img 2>/dev/null | grep -v '_raw\|_single' | head -1)
             fi
             [ -z "$src_file" ] && echo -e "${_FAIL} ${FTD_FW_DIR} 에 .img 없음" && return 1
-            _ftd_do_copy "$src_file" "${FTD_TFTP_PATH}/${FTD_FW_NAME}" || return 1
+            fw_copied_name=$(_ftd_do_copy "$src_file" "${FTD_TFTP_PATH}") || return 1
             ;;
         scan|*)
             local candidates
@@ -557,7 +549,7 @@ _ftd_up() {
                 src_file=$(echo "$candidates" | head -1 | awk '{print $NF}')
             fi
             [ -z "$src_file" ] && return 0
-            _ftd_do_copy "$src_file" "${FTD_TFTP_PATH}/${FTD_FW_NAME}" || return 1
+            fw_copied_name=$(_ftd_do_copy "$src_file" "${FTD_TFTP_PATH}") || return 1
             ;;
     esac
 
@@ -572,13 +564,20 @@ _ftd_up() {
 }
 
 _ftd_do_copy() {
-    local src="$1" dst="$2"
-    local dst_dir; dst_dir=$(dirname "$dst")
+    # 사용법: _ftd_do_copy <src_path> <dst_dir>
+    # FTD_FW_NAME 설정 시 rename, 비어있으면 원본명 유지
+    # stdout으로 복사된 파일명(basename)만 출력
+    local src="$1" dst_dir="$2"
+    local src_name; src_name=$(basename "$src")
+    local dst_name="${FTD_FW_NAME:-$src_name}"
+    local dst="${dst_dir}/${dst_name}"
+
     # 기존 img 백업
     if [ -d "${dst_dir}/backup_img" ] && ls "${dst_dir}"/*.img &>/dev/null; then
         mv "${dst_dir}"/*.img "${dst_dir}/backup_img/" 2>/dev/null || true
     fi
-    cp -a "$src" "$dst"
+    cp -a "$src" "$dst" || return 1
+    echo "$dst_name"
 }
 
 # ══════════════════════════════════════════════════════════════════════════
