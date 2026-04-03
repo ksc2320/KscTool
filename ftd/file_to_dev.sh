@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.2'
+FTD_VERSION='2.5.3'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -991,12 +991,11 @@ _ftd_crt_key() {
 
 _ftd_crt_paste() {
     local cmd="$1" wid="$2"
-    echo "$cmd" | xclip -selection clipboard 2>/dev/null || return 1
     xdotool windowraise "$wid" 2>/dev/null
-    xdotool windowfocus "$wid" 2>/dev/null
+    xdotool windowfocus --sync "$wid" 2>/dev/null
     sleep 0.2
-    xdotool key --clearmodifiers --window "$wid" ctrl+shift+v 2>/dev/null
-    sleep 0.1
+    xdotool type --clearmodifiers --delay 20 --window "$wid" "$cmd" 2>/dev/null
+    sleep 0.05
     xdotool key --clearmodifiers --window "$wid" Return 2>/dev/null
 }
 
