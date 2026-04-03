@@ -11,15 +11,13 @@ PERSONAL_CFG="$PRIVATE_DIR/personal.sh"
 cRed='\e[31m'; cGreen='\e[32m'; cYellow='\e[33m'
 cSky='\e[36m'; cDim='\e[2m'; cBold='\e[1m'; cReset='\e[0m'
 
-_step() { echo -e "\n${cBold}${cSky}[$1]${cReset} $2"; }
+_STEP=0; _TOTAL=3
+_step() { ((_STEP++)); echo -e "\n${cBold}${cSky}[${_STEP}/${_TOTAL}]${cReset} $1"; }
 _ok()   { echo -e "  ${cGreen}✓${cReset}  $*"; }
 _skip() { echo -e "  ${cDim}↩  $* (건너뜀)${cReset}"; }
 _warn() { echo -e "  ${cYellow}⚠  $*${cReset}"; }
 _ask()  { read -rp "  ${cBold}?${cReset}  $1 " "$2"; }
 
-# ─────────────────────────────────────────────────────────────
-# 함수 정의
-# ─────────────────────────────────────────────────────────────
 _link() {
     local name="$1"
     local src="$DOTFILES_DIR/$name"
@@ -32,17 +30,20 @@ _link() {
         _skip "$name (이미 링크됨)"; return
     fi
     if [[ -f "$dst" && ! -L "$dst" ]]; then
-        cp -f "$dst" "${dst}.bak.$(date +%Y%m%d)"
-        _warn "기존 파일 백업: ${dst}.bak.$(date +%Y%m%d)"
+        local bak="${dst}.bak.$(date +%Y%m%d)"
+        cp -f "$dst" "$bak"
+        _warn "기존 파일 백업: $bak"
     fi
     ln -sf "$src" "$dst"
     _ok "$name  →  $src"
 }
 
 _setup_personal() {
+    local _user _uname _pnum _proj _ws
+
     echo ""
-    _ask "사용자 이름 (USER, 예: jsh):" _user
-    _ask "표시 이름  (USER_NAME, 예: JSH):" _uname
+    _ask "사용자 이름 (DV_USER, 예: jsh):" _user
+    _ask "표시 이름  (DV_USER_NAME, 예: JSH):" _uname
 
     echo ""
     echo -e "  기본 프로젝트:"
@@ -61,14 +62,13 @@ _setup_personal() {
 # ~/.private/personal.sh — 개인 환경 오버라이드 (공유 금지)
 # dv firstsetup 으로 생성됨 — $(date '+%Y-%m-%d')
 
-export USER="${_user}"
-export USER_NAME="${_uname}"
+export DV_USER="${_user}"
+export DV_USER_NAME="${_uname}"
 NOW_PROJECT="${_proj}"
 WORKSPACE_DIR="${_ws}"
 HTTP_PATH="\$HOME/server_${_user}"
 EOF
     _ok "~/.private/personal.sh 생성 완료"
-    unset _user _uname _pnum _proj _ws
 }
 
 # ─────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ echo -e "  ${cDim}KscTool: $KSCTOOL_DIR${cReset}"
 # Step 1: dotfiles 심볼릭 링크
 #   symlink 이후 ~/.bash_functions == dotfiles/.bash_functions (sync 자동화)
 # ─────────────────────────────────────────────────────────────
-_step "1/3" "dotfiles 링크"
+_step "dotfiles 링크"
 _link .bash_aliases
 _link .bash_functions
 
@@ -93,7 +93,7 @@ _link .bash_functions
 #   .bashrc 소싱 순서: NOW_PROJECT=609 → ~/.private/*.sh → bash_functions
 #   personal.sh 가 마지막에 로드되므로 NOW_PROJECT 등 override 가능
 # ─────────────────────────────────────────────────────────────
-_step "2/3" "개인 설정"
+_step "개인 설정"
 
 mkdir -m 700 -p "$PRIVATE_DIR"
 
@@ -108,13 +108,13 @@ fi
 
 if [[ -f "$PERSONAL_CFG" ]]; then
     _warn "기존 설정 있음: $PERSONAL_CFG"
+    local _yn=''
     _ask "다시 설정하시겠습니까? [y/N]:" _yn
     if [[ "${_yn:-N}" == "y" || "${_yn:-N}" == "Y" ]]; then
         _setup_personal
     else
         _skip "개인 설정"
     fi
-    unset _yn
 else
     _setup_personal
 fi
@@ -122,7 +122,7 @@ fi
 # ─────────────────────────────────────────────────────────────
 # Step 3: dvhelp 확인
 # ─────────────────────────────────────────────────────────────
-_step "3/3" "설치 확인"
+_step "설치 확인"
 
 [[ -f "$KSCTOOL_DIR/tools/dvhelp.sh" ]] \
     && _ok "dvhelp 사용 가능" \
