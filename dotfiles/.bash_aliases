@@ -18,12 +18,46 @@ alias 'package'='cd $SOURCE_DIR/package'
 
 alias 'target'='cd $TARGET_DIR'
 alias 'dvpkg'='cd $TARGET_DIR/dv_pkg'
+
+## dv_pkg 주요 패키지
+alias 'dvbox'='cd $TARGET_DIR/dv_pkg/dvbox'
+alias 'dvcfg'='cd $TARGET_DIR/dv_pkg/dvcfg'
+alias 'dvsnmp'='cd $TARGET_DIR/dv_pkg/dvsnmp'
+alias 'dvstats'='cd $TARGET_DIR/dv_pkg/dv_statistics'
+alias 'dvstamon'='cd $TARGET_DIR/dv_pkg/dv_sta_mon'
+alias 'ktgsp'='cd $TARGET_DIR/dv_pkg/ktgsp'
+alias 'ktqos'='cd $TARGET_DIR/dv_pkg/ktqos'
+alias 'laborer'='cd $TARGET_DIR/dv_pkg/laborer'
+alias 'cwmpcli'='cd $TARGET_DIR/dv_pkg/cwmp_cli'
+alias 'ktwebsv'='cd $TARGET_DIR/dv_pkg/kt_webserver'
+
+## dvmgmt + 하위 모듈
 alias 'dvmgmt'='cd $TARGET_DIR/dv_pkg/dvmgmt'
 alias 'cmdtbl'='cd $TARGET_DIR/dv_pkg/dvmgmt/cmdtbl'
+alias 'dvnet'='cd $TARGET_DIR/dv_pkg/dvmgmt/network'
+alias 'dvmain'='cd $TARGET_DIR/dv_pkg/dvmgmt/main'
+alias 'dvwrdrt'='cd $TARGET_DIR/dv_pkg/dvmgmt/wrdrt'
+alias 'dvap'='cd $TARGET_DIR/dv_pkg/dvmgmt/ap'
+alias 'dvscan'='cd $TARGET_DIR/dv_pkg/dvmgmt/scan'
+alias 'dvswitch'='cd $TARGET_DIR/dv_pkg/dvmgmt/switch'
+alias 'dvdiag'='cd $TARGET_DIR/dv_pkg/dvmgmt/diagnostics'
+alias 'dvupgrade'='cd $TARGET_DIR/dv_pkg/dvmgmt/upgrade'
+alias 'dvmstats'='cd $TARGET_DIR/dv_pkg/dvmgmt/statistics'
+
+## kernel + 하위 모듈
 alias 'kernel'='cd $TARGET_DIR/dv_pkg/kernel'
 alias 'dvkpoll'='cd $TARGET_DIR/dv_pkg/kernel/dvkpoll'
 alias 'dualnat'='cd $TARGET_DIR/dv_pkg/kernel/dualnat'
 alias 'dyngsp'='cd $TARGET_DIR/dv_pkg/kernel/dvdyngsp'
+alias 'passthru'='cd $TARGET_DIR/dv_pkg/kernel/passthru'
+alias 'dvflag'='cd $TARGET_DIR/dv_pkg/kernel/dvflag'
+alias 'dvbrdio'='cd $TARGET_DIR/dv_pkg/kernel/dvbrdio'
+alias 'dvktrace'='cd $TARGET_DIR/dv_pkg/kernel/dvktrace'
+alias 'dvosutil'='cd $TARGET_DIR/dv_pkg/kernel/dvosutil'
+alias 'nettweak'='cd $TARGET_DIR/dv_pkg/kernel/nettweak'
+alias 'dvfwinfo'='cd $TARGET_DIR/dv_pkg/kernel/dvfwinfo'
+alias 'dvpwdet'='cd $TARGET_DIR/dv_pkg/kernel/dvpwdet'
+alias 'dvusb'='cd $TARGET_DIR/dv_pkg/kernel/dvusb'
 
 alias 'netifd'='cd $TARGET_DIR/netifd*'
 alias 'dnsmasq'='cd $TARGET_DIR/dnsmasq*/dnsmasq*/src'
@@ -227,14 +261,14 @@ alias scs="$HOME/KscTool/svn/svn_commit.sh"
 alias fwd='_ftd_main'
 ##cpbak (SVN/Git 수정 파일 백업)
 alias cpbak='_cpbak_main'
-##build
-alias bep="$HOME/KscTool/build/build_error_parse.sh"
-alias rbc="$HOME/KscTool/build/rebuild_changed.sh"
+##build — 비활성화 (동작 안함)
+#alias bep="$HOME/KscTool/build/build_error_parse.sh"
+#alias rbc="$HOME/KscTool/build/rebuild_changed.sh"
 ##tools
 alias obs="$HOME/KscTool/tools/obs.sh"
-##watch (AP 로그 감시 / SSH 연결)
-alias dvwatch="$HOME/KscTool/watch/dvwatch.sh"
-alias dvcon="$HOME/KscTool/watch/dvcon.sh"
+##watch (AP 로그 감시 / SSH 연결) — 비활성화 (동작 안함)
+#alias dvwatch="$HOME/KscTool/watch/dvwatch.sh"
+#alias dvcon="$HOME/KscTool/watch/dvcon.sh"
 
 #http server
 alias sv='cd ~/tftpboot'
@@ -298,7 +332,6 @@ alias pwdc='pwd | tee >(xclip -selection clipboard)'
 
 
 
-# Claude Code 계정 전환 (계정 값은 ~/.private/accounts.sh 에서 로드)
 # 예약 작업 뷰어
 crons() {
   local RESET='\033[0m' BOLD='\033[1m' CYAN='\033[36m' YELLOW='\033[33m' GREEN='\033[32m' DIM='\033[2m'
@@ -307,59 +340,53 @@ crons() {
   echo -e "\n${BOLD}${CYAN}══ 예약 작업 (crontab) ══${RESET}"
 
   local cron_entries
-  # 주석, 빈 줄, 환경변수 설정(VAR=...) 줄 제외
-  cron_entries=$(crontab -l 2>/dev/null | grep -v '^\s*#' | grep -v '^\s*$' | grep -v '^[A-Z_][A-Z_0-9]*=')
+  cron_entries=$(crontab -l 2>/dev/null | awk '!/^\s*#/ && !/^\s*$/ && !/^[A-Z_][A-Z_0-9]*=/')
 
   if [ -z "$cron_entries" ]; then
     echo -e "  ${DIM}(등록된 cron 없음)${RESET}"
   else
-    local now_dow=$(date +%u)  # 1=월 ~ 7=일
     while IFS= read -r line; do
       local min hour dom mon dow cmd
       read -r min hour dom mon dow cmd <<< "$line"
 
-      # 요일 라벨
       local dow_label=""
       if [ "$dow" = "*" ]; then
         dow_label="매일"
       else
-        # cron dow: 0=일,1=월...6=토,7=일
-        local idx=$(( dow % 7 ))
-        dow_label="매주 ${DAY_NAMES[$idx]}요일"
+        dow_label="매주 ${DAY_NAMES[$(( dow % 7 ))]}요일"
       fi
 
-      # 시각
       local time_label
       if [ "$min" = "*" ] && [ "$hour" = "*" ]; then
         time_label="매분"
       elif [[ "$hour" == */* ]]; then
-        local interval="${hour#*/}"
-        time_label="매 ${interval}시간 (분:${min})"
+        time_label="매 ${hour#*/}시간 (분:${min})"
       elif [[ "$min" == */* ]]; then
-        local interval="${min#*/}"
-        time_label="매 ${interval}분"
+        time_label="매 ${min#*/}분"
       elif [[ "$hour" == *,* ]]; then
-        # 다중 시각: 2,7,12,17,22 → "02:01, 07:01, ..."
-        time_label=$(echo "$hour" | tr ',' '\n' | while read -r h; do printf "%02d:%02d " "$h" "$min"; done | sed 's/ $//')
+        local IFS=','
+        time_label=""
+        for h in $hour; do time_label+=$(printf "%02d:%02d " "$h" "$min"); done
+        time_label="${time_label% }"
       else
         time_label=$(printf "%02d:%02d" "$hour" "$min")
       fi
 
-      # 명령 축약 (스크립트명만)
       local short_cmd
-      short_cmd=$(echo "$cmd" | awk '{print $1}' | xargs basename 2>/dev/null)
+      short_cmd=$(basename "${cmd%% *}")
 
       echo -e "  ${GREEN}●${RESET} ${BOLD}${short_cmd}${RESET}"
       echo -e "    ${YELLOW}${dow_label} ${time_label}${RESET}  ${DIM}${cmd}${RESET}"
     done <<< "$cron_entries"
   fi
 
-  # systemd timers (있으면)
-  if systemctl --user list-timers --no-legend 2>/dev/null | grep -q '.'; then
+  local timers
+  timers=$(systemctl --user list-timers --no-legend 2>/dev/null)
+  if [ -n "$timers" ]; then
     echo -e "\n${BOLD}${CYAN}══ systemd timers (user) ══${RESET}"
-    systemctl --user list-timers --no-legend 2>/dev/null | while read -r line; do
+    while IFS= read -r line; do
       echo -e "  ${GREEN}●${RESET} $line"
-    done
+    done <<< "$timers"
   fi
 
   echo ""
