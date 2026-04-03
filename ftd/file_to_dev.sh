@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.4'
+FTD_VERSION='2.5.5'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -965,8 +965,20 @@ _ftd_find_crt_window() {
     while IFS= read -r wid; do
         local title; title=$(xdotool getwindowname "$wid" 2>/dev/null)
         [ -z "$first_wid" ] && first_wid="$wid" && first_title="$title"
-        echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint" \
-            && { _CRT_WINDOW_TITLE="$title"; echo "$wid"; return 0; }
+        if echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
+            # SecureCRT는 frame(parent)과 terminal widget(child)이 분리됨.
+            # xdotool type은 실제 입력을 받는 child로 보내야 동작함.
+            local hex_child
+            hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
+                | grep -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
+                | grep -oP '0x[0-9a-f]+' | head -1)
+            if [ -n "$hex_child" ]; then
+                wid=$(printf '%d' "$hex_child")
+            fi
+            _CRT_WINDOW_TITLE="$title"
+            echo "$wid"
+            return 0
+        fi
     done < <(xdotool search --name "SecureCRT" 2>/dev/null)
     if [ -n "$first_wid" ]; then
         _CRT_WINDOW_TITLE="$first_title"
