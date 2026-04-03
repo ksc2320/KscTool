@@ -90,6 +90,15 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.8] — 2026-04-03
+
+#### Fixed
+- `_ftd_find_crt_window`: `grep -oP '0x[0-9a-f]+'` 가 한 줄에서 복수 hex 추출 → `printf` 실패 버그
+  - xwininfo 출력에 `0x<wid> ... 1 child: 0x<child>` 형태로 두 값이 포함될 때 발생
+  - `grep -m1 -oP` 로 수정 — 첫 번째 매치만 취득
+
+---
+
 ### [2.5.7] — 2026-04-03
 
 #### Added

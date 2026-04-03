@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.7'
+FTD_VERSION='2.5.8'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -996,7 +996,7 @@ _ftd_find_crt_window() {
                 local hex_child
                 hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
                     | grep -m1 -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
-                    | grep -oP '0x[0-9a-f]+')
+                    | grep -m1 -oP '0x[0-9a-f]+')
                 [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
             fi
             _CRT_WINDOW_TITLE="$title"
