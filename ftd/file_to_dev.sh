@@ -785,10 +785,8 @@ _ftd_transfer() {
                 _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0
             fi
 
-            local t_start; t_start=$(date +%s)
             echo -e "${_RUN} sysupgrade 전송..."
             _ftd_serial_cmd "$serial_dev" "$cmd_upgrade" 2
-            local elapsed=$(( $(date +%s) - t_start ))
             _ftd_log "OK" "$file_name" "$ap_ip"
             _ftd_wait_boot "$ap_ip"
         else
@@ -1005,7 +1003,6 @@ _ftd_check_http() {
 _ftd_ping_check() {
     local ap="$1"
     echo -ne "${_RUN} AP ping ${_F_DIM}(${ap})${_F_RST} "
-    # 3회 재시도 (1s 간격)
     for i in 1 2 3; do
         if ping -c1 -W1 "$ap" &>/dev/null; then
             echo -e "${_OK}"
@@ -1026,14 +1023,12 @@ _ftd_wait_boot() {
     echo -ne "  ${_F_DIM}AP 재부팅 대기 중 "
     for ((i=1; i<=50; i++)); do
         sleep 2
+        local elapsed=$(( $(date +%s) - t_start ))
         if ping -c1 -W1 "$ap" &>/dev/null; then
-            local elapsed=$(( $(date +%s) - t_start ))
             echo -e "${_F_RST}"
             _banner ok "AP 부팅 완료" "$elapsed"
             return 0
         fi
-        local elapsed=$(( $(date +%s) - t_start ))
-        # 카운터 갱신 (같은 줄 덮어쓰기)
         printf "\r  ${_F_DIM}AP 재부팅 대기 중 %3ds ...${_F_RST}" "$elapsed"
     done
     echo ""
