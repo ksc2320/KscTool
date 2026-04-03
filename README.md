@@ -4,7 +4,7 @@
 
 ## 폴더 구조
 
-```
+```text
 KscTool/
 ├── ftd/                        # AP 파일 전송 도구
 │   ├── file_to_dev.sh          # 메인 (alias: fwd / ftd)
@@ -28,7 +28,7 @@ KscTool/
 ## alias 등록 위치 (`~/.bash_aliases`)
 
 | alias | 경로 | 설명 |
-|-------|------|------|
+| ----- | ---- | ---- |
 | `fwd` / `ftd` | `ftd/file_to_dev.sh` | AP 파일 전송 |
 | `scs` | `svn/svn_commit.sh` | SVN 커밋 |
 | `bep` | `build/build_error_parse.sh` | 빌드 에러 파서 |
@@ -36,6 +36,8 @@ KscTool/
 | `obs` | `tools/obs.sh` | OBS 제어 |
 | `dvwatch` | `watch/dvwatch.sh` | AP 로그 감시 |
 | `dvcon` | `watch/dvcon.sh` | AP SSH 연결 |
+| `ucisnap` | `tools/ucisnap.sh` | UCI 설정 스냅샷/diff |
+| `specver` | `tools/specver.sh` | KT 규격서 버전 현황 |
 
 ---
 
