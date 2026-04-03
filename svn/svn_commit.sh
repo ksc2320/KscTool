@@ -26,7 +26,7 @@ NC='\033[0m' # 기본 색상
 # 스크립트 파일이 위치한 실제 디렉토리 (Git 저장소 루트여야 함)
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 # 전역 설정 (프로젝트 경로, 업데이트 상태 저장)
-GLOBAL_CONFIG_DIR="$HOME/.config/svn_commit_helper"
+GLOBAL_CONFIG_DIR="$HOME/.devtools/scs"
 GLOBAL_CONFIG_FILE="$GLOBAL_CONFIG_DIR/config"
 UPDATE_STATUS_FILE="$GLOBAL_CONFIG_DIR/update_status"
 LAST_CHECK_FILE="$GLOBAL_CONFIG_DIR/last_check"

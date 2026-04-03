@@ -25,6 +25,7 @@ KscTool/
 ├── build/      # 빌드 도구
 ├── tools/      # 기타 유틸
 ├── cpbak/      # 파일 백업/원복 도구
+├── dotfiles/   # 공유 가능한 shell 설정 (.bashrc, .bash_aliases, .bash_functions)
 ├── CHANGELOG.md
 ├── CLAUDE.md
 └── README.md
@@ -35,6 +36,15 @@ KscTool/
 - `~/.bash_aliases` `#ksc_tools` 섹션에 alias 추가
 - `README.md` 표 업데이트
 - `CHANGELOG.md`에 버전 항목 추가
+
+**dotfiles 수정 시:**
+- `~/.bash_aliases`, `~/.bash_functions`, `~/.bashrc`에서 개인정보 없는지 확인
+- 개인정보(이메일, API 키, 패스워드, IP 등)는 반드시 `~/.private/`로 분리
+- `dotfiles/` 폴더에 복사 후 git push
+- 개인정보 분리 구조:
+  - `~/.private/secrets.sh` — GEMINI_API_KEY, ROOT_PW
+  - `~/.private/accounts.sh` — 이메일 계정 정보
+  - `.bashrc`에서 `for _pvf in ~/.private/*.sh; do source; done` 패턴으로 로드
 
 ---
 
@@ -194,4 +204,4 @@ done
 
 ---
 
-_최종 갱신: 2026-04-03_
+_최종 갱신: 2026-04-03_ <!-- dotfiles/ 추가, 개인정보 분리 구조 추가 -->
