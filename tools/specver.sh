@@ -89,23 +89,81 @@ _sv_show() {
 }
 
 # ============================================================================
-#  list — Document/ 하위 전체 버전 있는 PDF 목록
+#  list — latest/ 최신본 목록 (fzf 선택 → 열기)
+#  list all — Document/ 전체 PDF 목록
 # ============================================================================
 _sv_list() {
-    if [ ! -d "$SV_DOC_DIR" ]; then
-        echo -e "  ${_FAIL} Document 디렉토리 없음: ${SV_DOC_DIR}"
+    local show_all="${1:-}"
+
+    if [ "$show_all" = 'all' ]; then
+        # ── 전체 목록 ────────────────────────────────────────────────────────
+        if [ ! -d "$SV_DOC_DIR" ]; then
+            echo -e "  ${_FAIL} Document 디렉토리 없음: ${SV_DOC_DIR}"
+            return 1
+        fi
+
+        if command -v fzf &>/dev/null; then
+            local selected
+            selected=$(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort | \
+                fzf --ansi \
+                    --prompt="📁 전체 규격서 선택 (Enter=열기) > " \
+                    --preview="basename {}" \
+                    --preview-window=up:1 \
+                    --color="prompt:cyan,pointer:green")
+            if [ -n "$selected" ]; then
+                echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$selected")${_F_RST}"
+                xdg-open "$selected" 2>/dev/null || \
+                    echo -e "  ${_WARN} xdg-open 실패. 경로: ${selected}"
+            fi
+            return
+        fi
+
+        echo ""
+        _hd "📁  Document/ 전체 PDF 목록"
+        echo ""
+        local count=0
+        while IFS= read -r f; do
+            local base dir ver in_latest
+            base=$(basename "$f")
+            dir=$(dirname "$f" | sed "s|${SV_DOC_DIR}/||")
+            [[ "$base" =~ V([0-9]+\.[0-9]+(\.[0-9]+)?) ]] \
+                && ver="${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}" \
+                || ver="${_F_DIM}-${_F_RST}"
+            in_latest=''
+            { [ -f "$SV_LATEST_DIR/$base" ] || [ -L "$SV_LATEST_DIR/$base" ]; } \
+                && in_latest=" ${_F_GREEN}[latest]${_F_RST}"
+            echo -e "  ${ver}  ${_F_DIM}$(printf '%-28s' "$dir")${_F_RST}  ${_F_WHITE}${base}${_F_RST}${in_latest}"
+            ((count++))
+        done < <(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort)
+        echo ""
+        echo -e "  ${_F_DIM}총 ${count}개${_F_RST}"
+        _ln
+        return
+    fi
+
+    # ── 기본: latest/ 최신본만 ───────────────────────────────────────────────
+    if [ ! -d "$SV_LATEST_DIR" ]; then
+        echo -e "  ${_FAIL} latest/ 디렉토리 없음: ${SV_LATEST_DIR}"
         return 1
     fi
 
-    # fzf 있으면 인터랙티브 선택 → xdg-open
+    local files=()
+    while IFS= read -r f; do
+        files+=("$f")
+    done < <(find "$SV_LATEST_DIR" \( -type f -o -type l \) -name "*.pdf" | sort)
+
+    if [ ${#files[@]} -eq 0 ]; then
+        echo -e "  ${_F_DIM}latest/ 에 PDF 없음${_F_RST}"
+        return
+    fi
+
     if command -v fzf &>/dev/null; then
         local selected
-        selected=$(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort | \
+        selected=$(printf '%s\n' "${files[@]}" | \
             fzf --ansi \
-                --prompt="📋 규격서 선택 (Enter=열기) > " \
+                --prompt="📋 최신 규격서 선택 (Enter=열기) > " \
                 --preview="basename {}" \
                 --preview-window=up:1 \
-                --bind="enter:accept" \
                 --color="prompt:cyan,pointer:green")
         if [ -n "$selected" ]; then
             echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$selected")${_F_RST}"
@@ -115,31 +173,22 @@ _sv_list() {
         return
     fi
 
-    # fzf 없으면 일반 목록 출력
+    # fzf 없으면 텍스트 목록
     echo ""
-    _hd "📁  Document/ 전체 버전 목록"
+    _hd "📋  최신 규격서 목록 (latest/)"
     echo ""
-
-    local count=0
-    while IFS= read -r f; do
-        local base dir ver in_latest
+    local i=1
+    for f in "${files[@]}"; do
+        local base ver
         base=$(basename "$f")
-        dir=$(dirname "$f" | sed "s|${SV_DOC_DIR}/||")
-        if [[ "$base" =~ V([0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
-            ver="${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}"
-        else
-            ver="${_F_DIM}-${_F_RST}"
-        fi
-        in_latest=''
-        if [ -f "$SV_LATEST_DIR/$base" ] || [ -L "$SV_LATEST_DIR/$base" ]; then
-            in_latest=" ${_F_GREEN}[latest]${_F_RST}"
-        fi
-        echo -e "  ${ver}  ${_F_DIM}$(printf '%-30s' "$dir")${_F_RST}  ${_F_WHITE}${base}${_F_RST}${in_latest}"
-        ((count++))
-    done < <(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort)
-
+        [[ "$base" =~ V([0-9]+\.[0-9]+(\.[0-9]+)?) ]] \
+            && ver=" ${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}" \
+            || ver=''
+        printf "  ${_F_BOLD}[%d]${_F_RST}  ${_F_WHITE}%s${_F_RST}%b\n" "$i" "$base" "$ver"
+        ((i++))
+    done
     echo ""
-    echo -e "  ${_F_DIM}총 ${count}개 PDF  |  fzf 설치 시 인터랙티브 선택 가능${_F_RST}"
+    echo -e "  ${_F_DIM}총 ${#files[@]}개  |  열기: specver open <키워드>${_F_RST}"
     _ln
 }
 
@@ -276,7 +325,7 @@ _sv_help() {
 #  엔트리포인트
 # ============================================================================
 case "${1:-}" in
-    list)           _sv_list ;;
+    list)           shift; _sv_list "${1:-}" ;;
     check)          _sv_check ;;
     open)           shift; _sv_open "$@" ;;
     help|--help|-h) _sv_help ;;
