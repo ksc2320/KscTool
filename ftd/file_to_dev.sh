@@ -67,6 +67,7 @@ _ftd_load_conf
 _ftd_detect_network() {
     local enx_info
     enx_info=$(ip -4 addr show 2>/dev/null | grep -A2 'enx' | grep 'inet ' | head -1)
+    _DETECTED_ENX_IF=$(ip link show 2>/dev/null | grep -oE 'enx[a-f0-9]+' | head -1)
     if [ -n "$enx_info" ]; then
         _DETECTED_HOST_IP=$(echo "$enx_info" | awk '{print $2}' | cut -d/ -f1)
         _DETECTED_AP_IP=$(echo "$_DETECTED_HOST_IP" | sed 's/\.[0-9]*$/.254/')
@@ -402,9 +403,9 @@ _ftd_check_pkg() {
     else
         echo -e "${_WARN} 없음 — 설치 시도..."
         if sudo apt-get install -y "$pkg" &>/dev/null; then
-            echo -e "  %-12s${_OK} 설치 완료" "$desc"
+            printf "  %-12s${_OK} 설치 완료\n" "$desc"
         else
-            echo -e "  %-12s${_FAIL} 설치 실패 (수동: sudo apt install ${pkg})" "$desc"
+            printf "  %-12s${_FAIL} 설치 실패 (수동: sudo apt install ${pkg})\n" "$desc"
         fi
     fi
 }
@@ -531,8 +532,11 @@ _ftd_up() {
             ;;
         scan|*)
             local candidates
-            candidates=$(find "$HOME/proj" -maxdepth 6 -name "*.img" 2>/dev/null \
-                | grep -v '_raw\|_single' | xargs ls -t 2>/dev/null | head -10)
+            candidates=$(find "$HOME/proj" -maxdepth 6 -name "*.img" \
+                -not -path '*/.git/*' -not -path '*/.svn/*' 2>/dev/null \
+                | grep -v '_raw\|_single' \
+                | xargs -r stat --printf '%Y %n\n' 2>/dev/null \
+                | sort -rn | awk '{print $2}' | head -10)
             [ -z "$candidates" ] && echo -e "${_FAIL} ~/proj 하위에 .img 없음" && return 1
             local src_file
             if [ $do_select -eq 1 ] || [ "$(echo "$candidates" | wc -l)" -gt 1 ]; then
@@ -548,19 +552,18 @@ _ftd_up() {
     echo -e "${_OK} ${_F_GREEN}${FTD_FW_NAME}${_F_RST} 복사 완료"
 
     # ── Step 2+3: 전송 ────────────────────────────────────────────────
-    _ftd_transfer \
-        --file "$FTD_FW_NAME" \
-        --upgrade \
-        ${upgrade_n:+"-n"} \
-        ${dry:+"--dry"} \
-        ${ap_ip_override:+"$ap_ip_override"}
+    local xfer_args=(--file "$FTD_FW_NAME" --upgrade)
+    [ "$upgrade_n" = "1" ] && xfer_args+=("-n")
+    [ "$dry" = "1" ]       && xfer_args+=("--dry")
+    [ -n "$ap_ip_override" ] && xfer_args+=("$ap_ip_override")
+    _ftd_transfer "${xfer_args[@]}"
 }
 
 _ftd_do_copy() {
     local src="$1" dst="$2"
     local dst_dir; dst_dir=$(dirname "$dst")
     # 기존 img 백업
-    if [ -d "${dst_dir}/backup_img" ] && ls "${dst_dir}"/*.img &>/dev/null 2>&1; then
+    if [ -d "${dst_dir}/backup_img" ] && ls "${dst_dir}"/*.img &>/dev/null; then
         mv "${dst_dir}"/*.img "${dst_dir}/backup_img/" 2>/dev/null || true
     fi
     cp -a "$src" "$dst"
@@ -735,7 +738,7 @@ _ftd_print_header() {
 
     fw_size=$(du -h "${FTD_TFTP_PATH}/${file}" 2>/dev/null | awk '{print $1}')
     fw_date=$(stat -c '%y' "${FTD_TFTP_PATH}/${file}" 2>/dev/null | cut -d. -f1)
-    enx_if=$(ip link show 2>/dev/null | grep -oE 'enx[a-f0-9]+' | head -1)
+    local enx_if="${_DETECTED_ENX_IF:-}"
     [ -n "$enx_if" ] && enx_tag="${_F_DIM}(${enx_if})${_F_RST}" || enx_tag=""
     [ -n "$serial" ] \
         && mode_tag="${_F_GREEN}시리얼${_F_RST} ${_F_DIM}${serial}${_F_RST}" \
@@ -882,7 +885,7 @@ _ftd_ping_check() {
 _ftd_wait_boot() {
     local ap="$1"
     echo -ne "${_F_DIM}   AP 재부팅 대기"
-    for i in $(seq 1 50); do
+    for ((i=1; i<=50; i++)); do
         sleep 2
         if ping -c1 -W1 "$ap" &>/dev/null; then
             echo -e "${_F_RST}"
@@ -932,7 +935,7 @@ _ftd_set() {
         local items=()
         for entry in "${KEYS[@]}"; do
             local key="${entry%%|*}" desc="${entry##*|}"
-            local val; val=$(grep "^${key}=" "$FTD_CONF" 2>/dev/null | cut -d= -f2- | tr -d "'")
+            local val="${!key}"
             items+=("$(printf '%-26s = %-22s  %s' "$key" "$val" "$desc")")
         done
         items+=("── 저장 후 종료 ──────────────────────────────────────────────────")
@@ -1246,12 +1249,10 @@ _ftd_clean() {
 #  dv 통합 — dv up / dv file 연결
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_dv_up() {
-    _ftd_load_conf
     _ftd_up "$@"
 }
 
 _ftd_dv_file() {
-    _ftd_load_conf
     _ftd_file "$@"
 }
 
