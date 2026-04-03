@@ -266,6 +266,8 @@ alias cpbak='_cpbak_main'
 #alias rbc="$HOME/KscTool/build/rebuild_changed.sh"
 ##tools
 alias obs="$HOME/KscTool/tools/obs.sh"
+alias ucisnap="$HOME/KscTool/tools/ucisnap.sh"
+alias specver="$HOME/KscTool/tools/specver.sh"
 ##watch (AP 로그 감시 / SSH 연결) — 비활성화 (동작 안함)
 #alias dvwatch="$HOME/KscTool/watch/dvwatch.sh"
 #alias dvcon="$HOME/KscTool/watch/dvcon.sh"
