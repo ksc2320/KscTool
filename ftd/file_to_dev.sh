@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.1'
+FTD_VERSION='2.5.2'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -974,6 +974,21 @@ _ftd_find_crt_window() {
     fi
 }
 
+_ftd_crt_key() {
+    _ftd_load_conf
+    local key="$1"
+    local crt_wid; crt_wid=$(_ftd_find_crt_window)
+    if [ -z "$crt_wid" ]; then
+        echo -e "${_WARN} SecureCRT 창 없음"; return 1
+    fi
+    local my_wid; my_wid=$(xdotool getactivewindow 2>/dev/null)
+    xdotool windowraise "$crt_wid" 2>/dev/null
+    xdotool windowfocus "$crt_wid" 2>/dev/null
+    sleep 0.15
+    xdotool key --clearmodifiers --window "$crt_wid" "$key" 2>/dev/null
+    [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
+}
+
 _ftd_crt_paste() {
     local cmd="$1" wid="$2"
     echo "$cmd" | xclip -selection clipboard 2>/dev/null || return 1
@@ -1600,11 +1615,12 @@ _ftd_register() {
     local a="${FTD_ALIAS:-ftd}"
     eval "alias ${a}='_ftd_main'"
 
-    # ap 함수 — preset 라우팅 포함 (ap preset → fwd preset, 나머지 → fwd cmd)
+    # ap 함수 — preset/특수키 라우팅 (ap.sh 동작 포함)
     ap() {
         case "${1:-}" in
-            preset) _ftd_main preset "${@:2}" ;;
-            *)      _ftd_cmd "$@" ;;
+            preset)     _ftd_main preset "${@:2}" ;;
+            c|ctrl-c)   _ftd_crt_key ctrl+c ;;
+            *)          _ftd_cmd "$@" ;;
         esac
     }
 

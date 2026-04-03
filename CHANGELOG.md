@@ -90,6 +90,15 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.2] — 2026-04-03
+
+#### Added
+- `_ftd_crt_key()` — 키 이벤트 전송 (Ctrl+C 등)
+- `ap c` / `ap ctrl-c` — SecureCRT에 Ctrl+C 전송
+- `~/.devtools/ftd/presets` 초기 상용구: login, rf, passwd (ap.sh 동일)
+
+---
+
 ### [2.5.1] — 2026-04-03
 
 #### Fixed
