@@ -774,11 +774,11 @@ _ftd_transfer() {
 
         if [ $do_upgrade -eq 1 ]; then
             echo ""
-            echo -e "${_F_RED}  ╔════════════════════════════════════════╗${_F_RST}"
-            echo -e "${_F_RED}  ║  ⚠  AP가 재부팅됩니다 — sysupgrade   ║${_F_RST}"
+            echo -e "${_F_CYAN}  ╔════════════════════════════════════════╗${_F_RST}"
+            echo -e "${_F_CYAN}  ║  ▶  AP가 재부팅됩니다 — sysupgrade   ║${_F_RST}"
             [ -n "$sysupgrade_opts" ] && \
-            echo -e "${_F_RED}  ║     옵션: ${_F_WHITE}${sysupgrade_opts}${_F_RED}                      ║${_F_RST}"
-            echo -e "${_F_RED}  ╚════════════════════════════════════════╝${_F_RST}"
+            echo -e "${_F_CYAN}  ║     옵션: ${_F_WHITE}${sysupgrade_opts}${_F_CYAN}                      ║${_F_RST}"
+            echo -e "${_F_CYAN}  ╚════════════════════════════════════════╝${_F_RST}"
             echo -ne "  진행? [y/N]: "; read -r confirm
             if [[ ! "$confirm" =~ ^[yY]$ ]]; then
                 _banner warn "다운로드만 완료 — upgrade 취소"
