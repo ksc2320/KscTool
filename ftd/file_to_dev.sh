@@ -506,8 +506,15 @@ _ftd_up() {
         dv)
             if declare -f send_file_to_tftp &>/dev/null; then
                 # 현재 쉘에 dv 함수 있음 → 기존 루틴 그대로
+                # 복사 전 tftp 파일 목록을 스냅샷 → 복사 후 새 파일 감지
+                local _pre_snap; _pre_snap=$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null)
                 send_file_to_tftp fw
                 [ $? -ne 0 ] && return 1
+                # send_file_to_tftp가 사용한 실제 파일명 감지
+                local _post_newest; _post_newest=$(ls -1t "${FTD_TFTP_PATH}"/*.img 2>/dev/null | head -1)
+                if [ -n "$_post_newest" ]; then
+                    fw_copied_name=$(basename "$_post_newest")
+                fi
             elif [ -n "${FW_DIR:-}" ] && [ -d "${FW_DIR:-}" ]; then
                 # 서브프로세스 실행이지만 $FW_DIR 환경변수는 있음 → 직접 복사
                 local src_file
@@ -554,10 +561,10 @@ _ftd_up() {
             ;;
     esac
 
-    echo -e "${_OK} ${_F_GREEN}${FTD_FW_NAME}${_F_RST} 복사 완료"
+    echo -e "${_OK} ${_F_GREEN}${fw_copied_name}${_F_RST} 복사 완료"
 
     # ── Step 2+3: 전송 ────────────────────────────────────────────────
-    local xfer_args=(--file "$FTD_FW_NAME" --upgrade)
+    local xfer_args=(--file "$fw_copied_name" --upgrade)
     [ "$upgrade_n" = "1" ] && xfer_args+=("-n")
     [ "$dry" = "1" ]       && xfer_args+=("--dry")
     [ -n "$ap_ip_override" ] && xfer_args+=("$ap_ip_override")
