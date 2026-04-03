@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.6'
+FTD_VERSION='2.5.7'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -84,7 +84,7 @@ FTD_MANAGE_HTTP='off'
 FTD_SYSUPGRADE_OPTS=''
 FTD_DV_INTEGRATION='auto'
 FTD_ALIAS='ftd'
-FTD_CRT_PASTE_MODE='type'
+FTD_CRT_PASTE_MODE='clip'
 
 # ── conf 로드 ─────────────────────────────────────────────────────────────
 _ftd_load_conf() {
@@ -271,14 +271,14 @@ _ftd_init() {
     echo -e "${_RUN} ${_F_BOLD}[7/9]${_F_RST} SecureCRT 명령 전송 방식"
     echo ""
     echo -e "  ${_F_WHITE}AP에 명령을 어떻게 전송할까요?${_F_RST}"
-    echo -e "  ${_F_CYAN}1)${_F_RST} type  ${_F_DIM}xdotool type — 직접 입력 ${_F_GREEN}(권장)${_F_RST}"
-    echo -e "  ${_F_CYAN}2)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+Shift+V — type이 안 될 때 (Plan B)${_F_RST}"
+    echo -e "  ${_F_CYAN}1)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+Shift+V ${_F_GREEN}(권장, 빠름)${_F_RST}"
+    echo -e "  ${_F_CYAN}2)${_F_RST} type  ${_F_DIM}xdotool type 직접 입력 — xclip 없을 때 (Plan B)${_F_RST}"
     echo -ne "  선택 (Enter=1): "
     read -r paste_mode_sel
     local new_paste_mode
     case "${paste_mode_sel:-1}" in
-        2) new_paste_mode="clip" ;;
-        *) new_paste_mode="type" ;;
+        2) new_paste_mode="type" ;;
+        *) new_paste_mode="clip" ;;
     esac
     echo -e "  ${_OK} ${_F_GREEN}${new_paste_mode}${_F_RST}"
     echo ""
@@ -383,7 +383,7 @@ FTD_SYSUPGRADE_OPTS=''
 # dv 명령 통합: on / off
 FTD_DV_INTEGRATION='${new_dv_integration}'
 
-# CRT 명령 전송 방식: type (xdotool 직접 입력, 권장) / clip (클립보드 Ctrl+Shift+V)
+# CRT 명령 전송 방식: clip (클립보드 Ctrl+Shift+V, 권장) / type (xdotool 직접 입력)
 FTD_CRT_PASTE_MODE='${new_paste_mode}'
 
 # 등록된 단축어
@@ -787,15 +787,18 @@ _ftd_transfer() {
     echo -e "${_RUN} ${_F_BOLD}[3/3]${_F_RST} AP 전송..."
 
     if [ -n "$crt_wid" ]; then
+        local my_wid; my_wid=$(xdotool getactivewindow 2>/dev/null)
         echo -e "${_F_GREEN}  SecureCRT 자동 붙여넣기 모드${_F_RST}"
         echo -e "${_F_DIM}   ${cmd_wget}${_F_RST}"
         _ftd_crt_paste "$cmd_wget" "$crt_wid"
+        [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
         echo -e "  ${_CLIP} wget 명령 전송 완료 — SecureCRT 창 확인"
 
         if [ $do_upgrade -eq 1 ]; then
             echo -ne "  wget 완료 후 Enter... "; read -r
             _ftd_upgrade_confirm "$sysupgrade_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
             _ftd_crt_paste "$cmd_upgrade" "$crt_wid"
+            [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
             _ftd_log "OK" "$file_name" "$ap_ip"
             _ftd_wait_boot "$ap_ip"
         fi
@@ -832,7 +835,7 @@ _ftd_transfer() {
         echo -e "${_F_WHITE}  ┌─ wget${_F_RST}"
         echo -e "${_F_SKY}  │ ${cmd_wget}${_F_RST}"
         echo -e "${_F_WHITE}  └─────────────${_F_RST}"
-        echo "$cmd_wget" | xclip -selection clipboard 2>/dev/null \
+        _ftd_clip_write "$cmd_wget" \
             && echo -e "  ${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
             || echo -e "  ${_WARN} xclip 없음 — 위 명령 수동 복사"
 
@@ -842,7 +845,7 @@ _ftd_transfer() {
             echo -e "${_F_WHITE}  ┌─ sysupgrade${_F_RST}"
             echo -e "${_F_RED}  │ ${cmd_upgrade}${_F_RST}"
             echo -e "${_F_WHITE}  └─────────────${_F_RST}"
-            echo "$cmd_upgrade" | xclip -selection clipboard 2>/dev/null \
+            _ftd_clip_write "$cmd_upgrade" \
                 && echo -e "  ${_CLIP} 클립보드 복사 — SecureCRT에서 붙여넣기" \
                 || echo -e "  ${_WARN} 위 명령 수동 복사"
         fi
@@ -1022,24 +1025,26 @@ _ftd_crt_key() {
     [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
 }
 
+_ftd_clip_write() {
+    if command -v xclip &>/dev/null; then
+        printf '%s' "$1" | xclip -selection clipboard 2>/dev/null
+    elif command -v xsel &>/dev/null; then
+        printf '%s' "$1" | xsel --clipboard --input 2>/dev/null
+    else
+        return 1
+    fi
+}
+
 _ftd_crt_paste() {
     local cmd="$1" wid="$2"
-    xdotool windowraise "$wid" 2>/dev/null
-    if [ "${FTD_CRT_PASTE_MODE:-type}" = "clip" ]; then
-        # Plan B: 클립보드 복사 후 Ctrl+Shift+V 붙여넣기
-        if command -v xclip &>/dev/null; then
-            printf '%s' "$cmd" | xclip -selection clipboard 2>/dev/null
-        elif command -v xsel &>/dev/null; then
-            printf '%s' "$cmd" | xsel --clipboard --input 2>/dev/null
-        fi
-        xdotool windowfocus --sync "$wid" 2>/dev/null
-        sleep 0.2
+    xdotool windowfocus --sync "$wid" 2>/dev/null
+    sleep 0.2
+    if [ "${FTD_CRT_PASTE_MODE:-clip}" = "clip" ]; then
+        _ftd_clip_write "$cmd"
         xdotool key --clearmodifiers --window "$wid" ctrl+shift+v 2>/dev/null
         sleep 0.1
     else
-        # Plan A: xdotool type 직접 입력 (기본)
-        xdotool windowfocus --sync "$wid" 2>/dev/null
-        sleep 0.2
+        # type 모드: xdotool type 직접 입력 (xclip 없거나 Ctrl+Shift+V 불가 환경)
         xdotool type --clearmodifiers --delay 20 --window "$wid" "$cmd" 2>/dev/null
         sleep 0.05
     fi
@@ -1544,7 +1549,7 @@ _ftd_cmd() {
         fi
         for step in "${steps[@]}"; do
             [ "${#steps[@]}" -gt 1 ] && echo -e "${_F_DIM}  → ${step}${_F_RST}"
-            echo "$step" | xclip -selection clipboard 2>/dev/null \
+            _ftd_clip_write "$step" \
                 && echo -e "  ${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
                 || echo -e "  ${_WARN} xclip 없음 — 위 명령 수동 복사"
             [ "${#steps[@]}" -gt 1 ] && { echo -ne "  다음 단계 Enter... "; read -r; }

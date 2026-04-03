@@ -90,6 +90,23 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.7] — 2026-04-03
+
+#### Added
+- `_ftd_clip_write()` — xclip/xsel 클립보드 쓰기 헬퍼 (4곳 중복 제거, printf 안전 처리)
+
+#### Changed
+- `FTD_CRT_PASTE_MODE` 기본값 `type` → `clip` — clip이 속도·일관성 모두 우월
+- `_ftd_crt_paste`: 80자 임계값 자동전환 제거 → 모드로만 통일 (y 확인 후 느린 문제 해결)
+- `_ftd_crt_paste`: `windowraise` 제거 — `windowfocus --sync`이 raise 포함, 중복 서브프로세스 불필요
+- `_ftd_crt_paste`: `windowfocus --sync` + `sleep 0.2` if/else 밖으로 이동 (DRY)
+
+#### Fixed
+- `_ftd_transfer`: sysupgrade 명령 전송 후 터미널 포커스 복귀 누락 수정
+- `_ftd_transfer`: wget 명령 전송 후 터미널 포커스 복귀 — "wget 완료 후 Enter..." 시 CRT 포커스 빼앗기 문제 해결
+
+---
+
 ### [2.5.6] — 2026-04-03
 
 #### Added
