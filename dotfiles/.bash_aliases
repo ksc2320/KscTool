@@ -259,6 +259,7 @@ alias ssq="svn status -q"
 alias scs="$HOME/KscTool/svn/svn_commit.sh"
 ##ftd (AP 파일 전송)
 alias fwd='_ftd_main'
+alias fwdc='fwd cmd'
 ##cpbak (SVN/Git 수정 파일 백업)
 alias cpbak='_cpbak_main'
 ##build — 비활성화 (동작 안함)
@@ -283,16 +284,6 @@ alias 'dynrecv'='nc -u -l -p 7557'
 alias smb='cd $HOME/smb'
 alias samba='smb'
 
-# ksc private aliases
-alias '시스템종료'='./바탕화면/shutdown_timer.sh'
-alias '여기'="open ."
-alias '질문'="cd ~/memo/질문대기/"
-alias '휴가'="cd ~/문서/휴가/"
-alias '급여명세서'="cd ~/문서/급여명세서/"
-alias '월급날'="mv ~/Downloads/*.PDF ~/문서/급여명세서/"
-alias 'usb'="cd /media/ksc/KSC_USB"
-alias '다운로드'="cd ~/다운로드"
-alias 'ddg'='cd ~/memo/personal/ddg/'
 
 # alias scr
 alias scr=scr
@@ -392,25 +383,4 @@ crons() {
   fi
 
   echo ""
-}
-
-# Claude Code 계정 전환 (계정 값은 ~/.private/accounts.sh 에서 로드)
-claude-sw() {
-  current=$(python3 -c "import json,os; d=json.load(open(os.path.expanduser('~/.claude.json'))); print(d.get('oauthAccount',{}).get('emailAddress','unknown'))" 2>/dev/null)
-  echo "현재: $current"
-
-  if [ "$current" = "$CLAUDE_PERSONAL_EMAIL" ]; then
-    next="팀 계정 ($CLAUDE_TEAM_EMAIL)"
-    browser="firefox"
-  else
-    next="개인 계정 ($CLAUDE_PERSONAL_EMAIL)"
-    browser="google-chrome"
-  fi
-
-  echo "→ 전환: $next (브라우저: $browser)"
-  read -p "진행? (y/n): " confirm
-  [ "$confirm" != "y" ] && return
-
-  claude auth logout
-  BROWSER=$browser claude auth login
 }

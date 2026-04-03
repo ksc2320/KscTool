@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.3.0'
+FTD_VERSION='2.4.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1372,19 +1372,28 @@ _ftd_cmd() {
     fi
     [ -z "$cmd" ] && return 0
 
-    # 시리얼 감지
-    local serial_dev=""
-    _ftd_detect_serial "$FTD_SERIAL_DEV"
+    # CRT 우선 → 시리얼 → 클립보드 (시리얼 열기 시 HUPCL 재연결 방지)
+    local crt_wid="" serial_dev=""
+    crt_wid=$(_ftd_find_crt_window)
+    [ -z "$crt_wid" ] && _ftd_detect_serial "$FTD_SERIAL_DEV"
 
     echo ""
-    if [ -n "$serial_dev" ]; then
-        echo -e "${_RUN} 시리얼 전송 (${serial_dev}): ${_F_CYAN}${cmd}${_F_RST}"
+    echo -e "${_F_WHITE}  ┌─ 명령${_F_RST}"
+    echo -e "${_F_SKY}  │ ${cmd}${_F_RST}"
+    echo -e "${_F_WHITE}  └──────${_F_RST}"
+    echo ""
+
+    if [ -n "$crt_wid" ]; then
+        local title="${_CRT_WINDOW_TITLE// - SecureCRT*/}"
+        echo -e "${_RUN} CRT 자동 붙여넣기 ${_F_DIM}(${title})${_F_RST}"
+        _ftd_crt_paste "$cmd" "$crt_wid" \
+            && echo -e "${_OK} 전송 완료" \
+            || echo -e "${_WARN} CRT 붙여넣기 실패 — 수동 입력 필요"
+    elif [ -n "$serial_dev" ]; then
+        echo -e "${_RUN} 시리얼 전송 ${_F_DIM}(${serial_dev})${_F_RST}"
         _ftd_serial_cmd "$serial_dev" "$cmd" 1
         echo -e "${_OK} 전송 완료"
     else
-        echo -e "${_F_WHITE}  ┌─ 명령${_F_RST}"
-        echo -e "${_F_SKY}  │ ${cmd}${_F_RST}"
-        echo -e "${_F_WHITE}  └──────${_F_RST}"
         echo "$cmd" | xclip -selection clipboard 2>/dev/null \
             && echo -e "${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
             || echo -e "${_WARN} xclip 없음 — 위 명령 수동 복사"

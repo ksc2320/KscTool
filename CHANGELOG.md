@@ -90,6 +90,17 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.4.0] — 2026-04-03
+
+#### Added
+- `fwdc` alias — `fwd cmd` 단축어 (`.bash_aliases`)
+
+#### Changed
+- `_ftd_cmd`: CRT 창 → 시리얼 → 클립보드 순 감지 (시리얼 미감지 시 SecureCRT reconnect 방지)
+- `_ftd_cmd`: 명령 박스 항상 상단 출력 후 전송 결과 표시로 UX 통일
+
+---
+
 ### [2.3.0] — 2026-04-03
 
 #### Added
