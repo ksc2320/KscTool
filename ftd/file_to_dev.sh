@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.3'
+FTD_VERSION='2.5.4'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1228,10 +1228,7 @@ _ftd_doctor() {
         if command -v "$cmd" &>/dev/null; then
             echo -e "${_OK}"
         else
-            case "$cmd" in
-                xdotool) echo -e "${_FAIL} 없음  ${_F_DIM}sudo apt install xdotool${_F_RST}" ;;
-                *)        echo -e "${_FAIL} 없음" ;;
-            esac
+            echo -e "${_FAIL} 없음  ${_F_DIM}sudo apt install ${cmd}${_F_RST}"
         fi
     done
     printf "    %-12s" "pyserial"
@@ -1399,7 +1396,7 @@ _ftd_preset_list() {
     echo ""
     echo -e "  ${_F_WHITE}상용구 목록${_F_RST} ${_F_DIM}(${FTD_PRESET_FILE})${_F_RST}"
     echo ""
-    if [ ! -f "$FTD_PRESET_FILE" ] || [ ! -s "$FTD_PRESET_FILE" ]; then
+    if [ ! -s "$FTD_PRESET_FILE" ]; then
         echo -e "  ${_F_DIM}(없음)  fwd preset set <이름> <명령>  으로 추가${_F_RST}"
     else
         while IFS='=' read -r name val; do
@@ -1463,17 +1460,8 @@ _ftd_cmd() {
     fi
     [ -z "$cmd" ] && return 0
 
-    # xdotool 설치 확인
-    if ! command -v xdotool &>/dev/null; then
-        echo ""
-        echo -e "${_WARN} ${_F_YELLOW}xdotool 미설치 — CRT 자동 붙여넣기 불가${_F_RST}"
-        echo -e "  ${_F_DIM}설치: sudo apt install xdotool${_F_RST}"
-        echo ""
-    fi
-
     # CRT 창 감지 (시리얼 포트 미접촉)
-    local crt_wid=""
-    crt_wid=$(_ftd_find_crt_window)
+    local crt_wid; crt_wid=$(_ftd_find_crt_window)
 
     # 다단계 명령 파싱 (| 구분)
     IFS='|' read -ra steps <<< "$cmd"
@@ -1502,7 +1490,11 @@ _ftd_cmd() {
         [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
         echo -e "${_OK} 전송 완료"
     else
-        [ -n "$(command -v xdotool)" ] && echo -e "${_WARN} SecureCRT 창 없음 — 클립보드로 대체"
+        if command -v xdotool &>/dev/null; then
+            echo -e "${_WARN} SecureCRT 창 없음 — 클립보드로 대체"
+        else
+            echo -e "${_WARN} ${_F_YELLOW}xdotool 미설치${_F_RST} ${_F_DIM}(sudo apt install xdotool)${_F_RST} — 클립보드로 대체"
+        fi
         for step in "${steps[@]}"; do
             [ "${#steps[@]}" -gt 1 ] && echo -e "${_F_DIM}  → ${step}${_F_RST}"
             echo "$step" | xclip -selection clipboard 2>/dev/null \
