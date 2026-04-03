@@ -37,7 +37,7 @@ KscTool/
 | `dvwatch` | `watch/dvwatch.sh` | AP 로그 감시 |
 | `dvcon` | `watch/dvcon.sh` | AP SSH 연결 |
 | `ucisnap` | `tools/ucisnap.sh` | UCI 설정 스냅샷/diff |
-| `specver` | `tools/specver.sh` | KT 규격서 버전 현황 |
+| `spec` | `tools/spec.sh` | KT 규격서 버전 현황 / 열기 / 경로 / 스캔 |
 
 ---
 

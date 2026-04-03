@@ -2790,3 +2790,44 @@ fi
 
 # cpbak — SVN/Git 수정 파일 백업 & 원복 도구
 [ -f "$HOME/KscTool/cpbak/cpbak.sh" ] && source "$HOME/KscTool/cpbak/cpbak.sh"
+
+# ================================================================= #
+#                    KscTool 미설치 안내 (fallback)                  #
+# ================================================================= #
+# @desc 커맨드 목록 조회 — dvhelp [키워드]
+function dvhelp() {
+    local script="$HOME/KscTool/tools/dvhelp.sh"
+    if [[ -f "$script" ]]; then
+        bash "$script" "$@"
+    else
+        _ksc_setup_hint "dvhelp"
+    fi
+}
+# KscTool이 없을 때 관련 명령어 호출 시 설치 안내를 출력한다.
+# KscTool이 설치되면 위의 source 구문이 먼저 실행되므로 아래 stubs는 무시된다.
+
+_ksc_setup_hint() {
+    local cmd="${1:-이 명령어}"
+    echo -e ""
+    echo -e "  ${cYellow}⚠  '${cmd}'은 KscTool이 필요합니다.${cReset}"
+    echo -e ""
+    echo -e "  ${cBold}설치 방법:${cReset}"
+    echo -e "    ${cGreen}git clone https://github.com/ksc2320/KscTool.git ~/KscTool${cReset}"
+    echo -e "    ${cGreen}source ~/.bashrc${cReset}"
+    echo -e ""
+    echo -e "  설치 후 dvhelp 로 활성화된 명령어 목록을 확인하세요."
+    echo -e ""
+}
+
+if [[ ! -d "$HOME/KscTool" ]]; then
+    # source로 로드되는 함수들 fallback
+    function _ftd_main()   { _ksc_setup_hint "fwd (ftd)"; }
+    function _cpbak_main() { _ksc_setup_hint "cpbak"; }
+
+    # 직접 경로 alias들 fallback (bash_aliases보다 나중에 로드되므로 override 됨)
+    for _ksc_cmd in scs obs ucisnap specver genindex genindex-tags genindex-bear; do
+        # shellcheck disable=SC2139
+        alias "$_ksc_cmd"="_ksc_setup_hint $_ksc_cmd"
+    done
+    unset _ksc_cmd
+fi

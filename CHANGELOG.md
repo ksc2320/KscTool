@@ -20,7 +20,33 @@
 
 ---
 
-## specver (specver.sh)
+## spec (spec.sh)
+
+### [2.0.0] — 2026-04-03
+
+#### 추가
+
+- `open` — 재검색 루프: 열기/미매칭 후 `"다시 검색 [키워드/Enter=종료]"` 프롬프트
+- `path <키워드>` — 규격서 파일 경로 출력 (열기 X, stdout으로 경로 반환)
+- `scan` — 등록 경로 스캔 → 문서명 기준 최신 버전 PDF를 `latest/` 심볼릭 링크로 등록
+- `scan add <경로>` / `scan rm <경로>` / `scan dirs` — 스캔 경로 관리
+- 스캔 설정: `~/.devtools/spec/scan_dirs`
+
+#### 변경
+
+- 명령어 `specver` → `spec` (파일명 `specver.sh` → `spec.sh`)
+- 인자 없는 키워드 단축: `spec IPv6` → `open` 자동 처리 + 재검색 루프
+
+### [1.0.1] — 2026-04-03
+
+#### 수정 (simplify)
+
+- `_sv_open()` find 괄호 누락 버그 수정 (심볼릭 링크 과다 반환)
+- `echo|xargs` 트림 → bash param expansion (fork 제거)
+- `basename`/`dirname|sed` → `${f##*/}` / param expansion
+- `find|grep -i` → `find -iname` (grep 서브프로세스 제거)
+- `_sv_check()` 확장자 블랙리스트 → `*.pdf` 화이트리스트
+- 공통 헬퍼 추출: `_sv_need_latest`, `_sv_open_file`, `_sv_fzf_pick`
 
 ### [1.0.0] — 2026-04-03
 
@@ -31,7 +57,6 @@
 - `list all` — Document/ 전체 PDF 스캔, latest/ 연결 여부 + 버전 표시
 - `check` — latest/ 심볼릭 링크 유효성 검사
 - `open <키워드>` — 키워드로 규격서 찾아서 xdg-open
-- 인자 없는 키워드도 `open` 단축으로 처리
 
 ---
 
