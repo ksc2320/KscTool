@@ -90,6 +90,15 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.4.1] — 2026-04-03
+
+#### Fixed
+- `_ftd_cmd`: 시리얼 fallback 완전 제거 — 포트를 열지 않으므로 HUPCL SecureCRT 재연결 원천 차단
+- `_ftd_detect_serial` probe: HUPCL 비활성화 후 close — `fwd up` 등 시리얼 감지 시에도 재연결 방지
+- `_ftd_crt_paste`: `windowraise` 추가 + `--clearmodifiers` (ap.sh 동작 방식과 통일)
+
+---
+
 ### [2.4.0] — 2026-04-03
 
 #### Added

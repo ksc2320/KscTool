@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.4.0'
+FTD_VERSION='2.4.1'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -905,9 +905,10 @@ _ftd_detect_serial() {
         found_any=1
         local rc
         rc=$(python3 -c "
-import serial, sys, errno as E
+import serial, sys, errno as E, termios
 try:
-    s = serial.Serial('${dev}', 115200, timeout=0.5)
+    s = serial.Serial('${dev}', 115200, timeout=0.5, dsrdtr=False, rtscts=False, xonxoff=False)
+    a=termios.tcgetattr(s.fileno()); a[2]&=~termios.HUPCL; termios.tcsetattr(s.fileno(),termios.TCSAFLUSH,a)
     s.close()
     print('OK')
 except serial.SerialException as e:
@@ -974,11 +975,12 @@ _ftd_find_crt_window() {
 _ftd_crt_paste() {
     local cmd="$1" wid="$2"
     echo "$cmd" | xclip -selection clipboard 2>/dev/null || return 1
-    xdotool windowfocus --sync "$wid" 2>/dev/null
+    xdotool windowraise "$wid" 2>/dev/null
+    xdotool windowfocus "$wid" 2>/dev/null
+    sleep 0.2
+    xdotool key --clearmodifiers --window "$wid" ctrl+shift+v 2>/dev/null
     sleep 0.1
-    xdotool key --window "$wid" ctrl+shift+v 2>/dev/null
-    sleep 0.1
-    xdotool key --window "$wid" Return 2>/dev/null
+    xdotool key --clearmodifiers --window "$wid" Return 2>/dev/null
 }
 
 # ── 시리얼 조작 ───────────────────────────────────────────────────────────
@@ -1372,10 +1374,9 @@ _ftd_cmd() {
     fi
     [ -z "$cmd" ] && return 0
 
-    # CRT 우선 → 시리얼 → 클립보드 (시리얼 열기 시 HUPCL 재연결 방지)
-    local crt_wid="" serial_dev=""
+    # 시리얼 포트를 건드리지 않음 — CRT paste 또는 클립보드만 사용
+    local crt_wid=""
     crt_wid=$(_ftd_find_crt_window)
-    [ -z "$crt_wid" ] && _ftd_detect_serial "$FTD_SERIAL_DEV"
 
     echo ""
     echo -e "${_F_WHITE}  ┌─ 명령${_F_RST}"
@@ -1389,10 +1390,6 @@ _ftd_cmd() {
         _ftd_crt_paste "$cmd" "$crt_wid" \
             && echo -e "${_OK} 전송 완료" \
             || echo -e "${_WARN} CRT 붙여넣기 실패 — 수동 입력 필요"
-    elif [ -n "$serial_dev" ]; then
-        echo -e "${_RUN} 시리얼 전송 ${_F_DIM}(${serial_dev})${_F_RST}"
-        _ftd_serial_cmd "$serial_dev" "$cmd" 1
-        echo -e "${_OK} 전송 완료"
     else
         echo "$cmd" | xclip -selection clipboard 2>/dev/null \
             && echo -e "${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST}" \
