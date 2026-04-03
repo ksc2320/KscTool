@@ -84,7 +84,7 @@ _sv_show() {
 
     echo ""
     echo -e "  ${_F_DIM}latest/: ${SV_LATEST_DIR}${_F_RST}"
-    echo -e "  ${_F_DIM}INDEX : ${SV_INDEX}${_F_RST}"
+    echo -e "  ${_F_DIM}열기  : specver list  또는  specver open <키워드>${_F_RST}"
     _ln
 }
 
@@ -97,34 +97,49 @@ _sv_list() {
         return 1
     fi
 
+    # fzf 있으면 인터랙티브 선택 → xdg-open
+    if command -v fzf &>/dev/null; then
+        local selected
+        selected=$(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort | \
+            fzf --ansi \
+                --prompt="📋 규격서 선택 (Enter=열기) > " \
+                --preview="basename {}" \
+                --preview-window=up:1 \
+                --bind="enter:accept" \
+                --color="prompt:cyan,pointer:green")
+        if [ -n "$selected" ]; then
+            echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$selected")${_F_RST}"
+            xdg-open "$selected" 2>/dev/null || \
+                echo -e "  ${_WARN} xdg-open 실패. 경로: ${selected}"
+        fi
+        return
+    fi
+
+    # fzf 없으면 일반 목록 출력
     echo ""
     _hd "📁  Document/ 전체 버전 목록"
     echo ""
 
     local count=0
     while IFS= read -r f; do
-        local base dir ver
+        local base dir ver in_latest
         base=$(basename "$f")
         dir=$(dirname "$f" | sed "s|${SV_DOC_DIR}/||")
-        # 파일명에서 버전 패턴 추출 (V{숫자}.{숫자})
         if [[ "$base" =~ V([0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
             ver="${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}"
         else
             ver="${_F_DIM}-${_F_RST}"
         fi
-
-        # latest/ 에 연결됐으면 강조
-        local in_latest=''
+        in_latest=''
         if [ -f "$SV_LATEST_DIR/$base" ] || [ -L "$SV_LATEST_DIR/$base" ]; then
             in_latest=" ${_F_GREEN}[latest]${_F_RST}"
         fi
-
         echo -e "  ${ver}  ${_F_DIM}$(printf '%-30s' "$dir")${_F_RST}  ${_F_WHITE}${base}${_F_RST}${in_latest}"
         ((count++))
     done < <(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort)
 
     echo ""
-    echo -e "  ${_F_DIM}총 ${count}개 PDF${_F_RST}"
+    echo -e "  ${_F_DIM}총 ${count}개 PDF  |  fzf 설치 시 인터랙티브 선택 가능${_F_RST}"
     _ln
 }
 
