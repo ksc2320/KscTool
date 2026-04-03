@@ -2803,8 +2803,6 @@ function dvhelp() {
         _ksc_setup_hint "dvhelp"
     fi
 }
-# KscTool이 없을 때 관련 명령어 호출 시 설치 안내를 출력한다.
-# KscTool이 설치되면 위의 source 구문이 먼저 실행되므로 아래 stubs는 무시된다.
 
 _ksc_setup_hint() {
     local cmd="${1:-이 명령어}"
@@ -2825,7 +2823,7 @@ if [[ ! -d "$HOME/KscTool" ]]; then
     function _cpbak_main() { _ksc_setup_hint "cpbak"; }
 
     # 직접 경로 alias들 fallback (bash_aliases보다 나중에 로드되므로 override 됨)
-    for _ksc_cmd in scs obs ucisnap specver genindex genindex-tags genindex-bear; do
+    for _ksc_cmd in scs obs ucisnap spec genindex genindex-tags genindex-bear; do
         # shellcheck disable=SC2139
         alias "$_ksc_cmd"="_ksc_setup_hint $_ksc_cmd"
     done
