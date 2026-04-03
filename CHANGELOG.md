@@ -5,6 +5,32 @@
 
 ---
 
+## dvwatch (dvwatch.sh)
+
+### [1.0.0] — 2026-04-03
+
+#### Added
+- SSH / 시리얼 / 로컬 파일 소스 자동 전환 (`--serial`, `--ssh`, `-f`)
+- 패턴 하이라이팅 `-p` (여러 개 가능, 컬러 순환). `[ksc]` 태그 항상 빨간색
+- 세션 저장 `-s` / 패턴 감지 시 자동 저장 `--save-on-match`
+- 마커 삽입 `Ctrl+\` — `─── MARK HH:MM:SS ───`
+- 알림 `--notify` — notify-send / 터미널 벨
+- `sessions` 서브 명령 — 저장 세션 목록
+- ftd config 재활용 (AP IP, 시리얼 설정, 계정)
+
+---
+
+## dvcon (dvcon.sh)
+
+### [1.0.0] — 2026-04-03
+
+#### Added
+- ftd config 기반 AP SSH 자동 연결
+- 인자로 IP 직접 지정 가능 (`dvcon 192.168.1.254`)
+- sshpass 지원 (FTD_LOGIN_PASS 설정 시)
+
+---
+
 ## ftd (file_to_dev.sh)
 
 ### [2.2.0] — 2026-04-03

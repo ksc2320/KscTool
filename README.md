@@ -15,6 +15,9 @@ KscTool/
 ├── build/                      # 빌드 도구
 │   ├── build_error_parse.sh    # 빌드 에러 파서 (alias: bep)
 │   └── rebuild_changed.sh      # SVN 변경분 재빌드 (alias: rbc)
+├── watch/                      # AP 로그 감시 도구
+│   ├── dvwatch.sh              # 로그 감시 (alias: dvwatch)
+│   └── dvcon.sh                # AP SSH 연결 (alias: dvcon)
 ├── tools/                      # 기타 유틸리티
 │   ├── obs.sh                  # OBS 제어 (alias: obs)
 │   ├── gen_index.sh            # 인덱스 생성
@@ -31,6 +34,8 @@ KscTool/
 | `bep` | `build/build_error_parse.sh` | 빌드 에러 파서 |
 | `rbc` | `build/rebuild_changed.sh` | 변경분 재빌드 |
 | `obs` | `tools/obs.sh` | OBS 제어 |
+| `dvwatch` | `watch/dvwatch.sh` | AP 로그 감시 |
+| `dvcon` | `watch/dvcon.sh` | AP SSH 연결 |
 
 ---
 
@@ -56,6 +61,26 @@ fwd doctor          # 환경 진단
 ```
 
 설정: `~/.config/ftd/config` (chmod 600)
+
+---
+
+## watch — AP 로그 감시 / SSH 연결
+
+```bash
+dvcon                           # ftd config 기반 AP SSH 자동 연결
+dvcon 192.168.1.254             # IP 직접 지정
+dvwatch                         # SSH → logread -f 스트림
+dvwatch -p "dying gasp"         # 패턴 하이라이팅
+dvwatch -p ERROR -p WARN -s     # 멀티 패턴 + 세션 저장
+dvwatch --serial                # 시리얼 모드 (EBUSY → SSH 자동 폴백)
+dvwatch --serial /dev/ttyUSB1   # 포트 명시
+dvwatch -f /tmp/sys.log         # 로컬 파일 감시
+dvwatch --save-on-match -p PANIC  # PANIC 감지 시 자동 저장 시작
+dvwatch sessions                # 저장된 세션 목록
+```
+
+설정: `~/.config/dvwatch/config` (없으면 ftd config 값 사용)
+저장: `~/.config/dvwatch/sessions/YYYYMMDD_HHMMSS.log`
 
 ---
 
