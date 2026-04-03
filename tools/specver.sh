@@ -1,18 +1,19 @@
 #!/bin/bash
 # ============================================================================
-#  specver.sh — KT 규격서 버전 현황 v1.0.0
+#  specver.sh — KT 규격서 버전 현황 v1.0.1
 # ============================================================================
 #  사용법:  specver [명령] [키워드]
 #
 #  Commands:
 #    (없음)           latest/ 규격서 버전 목록 출력
-#    list             Document/ 하위 전체 PDF 목록 (버전 강조)
+#    list             latest/ 최신본 목록 (fzf 선택 → 열기)
+#    list all         Document/ 전체 PDF 목록
 #    check            latest/ 심볼릭 링크 유효성 검사
 #    open <키워드>    키워드로 규격서 찾아 열기 (xdg-open)
 #    help             이 도움말
 # ============================================================================
 
-SV_VERSION='1.0.0'
+SV_VERSION='1.0.1'
 SV_DOC_DIR="$HOME/문서/Document"
 SV_LATEST_DIR="$SV_DOC_DIR/latest"
 SV_INDEX="$SV_LATEST_DIR/INDEX.md"
@@ -27,6 +28,34 @@ _WARN="${_F_YELLOW}⚠${_F_RST}"; _RUN="${_F_CYAN}▶${_F_RST}"
 
 _ln() { echo -e "${_F_CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${_F_RST}"; }
 _hd() { _ln; echo -e "  ${_F_BOLD}${_F_WHITE}$*${_F_RST}"; _ln; }
+
+# ── 공통 헬퍼 ────────────────────────────────────────────────────────────────
+
+# latest/ 디렉토리 존재 확인
+_sv_need_latest() {
+    [ -d "$SV_LATEST_DIR" ] && return 0
+    echo -e "  ${_FAIL} latest/ 디렉토리 없음: ${SV_LATEST_DIR}"
+    return 1
+}
+
+# 파일 열기 (xdg-open + fallback 메시지)
+_sv_open_file() {
+    local f="$1"
+    echo -e "  ${_RUN} 열기: ${_F_CYAN}${f##*/}${_F_RST}"
+    xdg-open "$f" 2>/dev/null || echo -e "  ${_WARN} xdg-open 실패. 경로: ${f}"
+}
+
+# fzf picker: stdin으로 목록 받아 선택 → 열기
+_sv_fzf_pick() {
+    local prompt="$1"
+    local selected
+    selected=$(fzf --ansi \
+        --prompt="$prompt" \
+        --preview="basename {}" \
+        --preview-window=up:1 \
+        --color="prompt:cyan,pointer:green")
+    [ -n "$selected" ] && _sv_open_file "$selected"
+}
 
 # ============================================================================
 #  기본 — INDEX.md 파싱 후 컬러 출력
@@ -44,29 +73,25 @@ _sv_show() {
     _hd "📋  KT 규격서 현황  (${today})"
     echo ""
 
-    # INDEX.md 테이블 파싱 (| 로 구분된 줄만)
     local found=0
     while IFS='|' read -ra cols; do
-        # 헤더·구분선 스킵
         [[ "${cols[1]:-}" =~ ^[[:space:]]*[-]+[[:space:]]*$ ]] && continue
         [[ "${cols[1]:-}" =~ ^[[:space:]]*약칭 ]] && continue
         [ "${#cols[@]}" -lt 4 ] && continue
 
-        local name ver file
-        name=$(echo "${cols[1]:-}" | xargs)
-        file=$(echo "${cols[2]:-}" | xargs)
-        ver=$(echo "${cols[3]:-}" | xargs)
+        # bash 트림 (fork 없음)
+        local name="${cols[1]#"${cols[1]%%[![:space:]]*}"}"; name="${name%"${name##*[![:space:]]}"}"
+        local file="${cols[2]#"${cols[2]%%[![:space:]]*}"}"; file="${file%"${file##*[![:space:]]}"}"
+        local ver="${cols[3]#"${cols[3]%%[![:space:]]*}"}";  ver="${ver%"${ver##*[![:space:]]}"}"
         [ -z "$name" ] && continue
 
-        # latest/ 파일 존재 여부 확인
-        local status icon
+        local icon
         if [ -f "$SV_LATEST_DIR/$file" ] || [ -L "$SV_LATEST_DIR/$file" ]; then
             icon="${_OK}"
         else
             icon="${_FAIL}"
         fi
 
-        # 버전 컬러
         local ver_colored
         if [ -n "$ver" ] && [ "$ver" != "-" ]; then
             ver_colored="${_F_CYAN}${ver}${_F_RST}"
@@ -103,18 +128,8 @@ _sv_list() {
         fi
 
         if command -v fzf &>/dev/null; then
-            local selected
-            selected=$(find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort | \
-                fzf --ansi \
-                    --prompt="📁 전체 규격서 선택 (Enter=열기) > " \
-                    --preview="basename {}" \
-                    --preview-window=up:1 \
-                    --color="prompt:cyan,pointer:green")
-            if [ -n "$selected" ]; then
-                echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$selected")${_F_RST}"
-                xdg-open "$selected" 2>/dev/null || \
-                    echo -e "  ${_WARN} xdg-open 실패. 경로: ${selected}"
-            fi
+            find "$SV_DOC_DIR" -name "*.pdf" ! -path "*/latest/*" | sort | \
+                _sv_fzf_pick "📁 전체 규격서 선택 (Enter=열기) > "
             return
         fi
 
@@ -123,13 +138,12 @@ _sv_list() {
         echo ""
         local count=0
         while IFS= read -r f; do
-            local base dir ver in_latest
-            base=$(basename "$f")
-            dir=$(dirname "$f" | sed "s|${SV_DOC_DIR}/||")
+            local base="${f##*/}"
+            local dir="${f%/*}"; dir="${dir#"${SV_DOC_DIR}/"}"
+            local ver in_latest=''
             [[ "$base" =~ V([0-9]+\.[0-9]+(\.[0-9]+)?) ]] \
                 && ver="${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}" \
                 || ver="${_F_DIM}-${_F_RST}"
-            in_latest=''
             { [ -f "$SV_LATEST_DIR/$base" ] || [ -L "$SV_LATEST_DIR/$base" ]; } \
                 && in_latest=" ${_F_GREEN}[latest]${_F_RST}"
             echo -e "  ${ver}  ${_F_DIM}$(printf '%-28s' "$dir")${_F_RST}  ${_F_WHITE}${base}${_F_RST}${in_latest}"
@@ -142,10 +156,7 @@ _sv_list() {
     fi
 
     # ── 기본: latest/ 최신본만 ───────────────────────────────────────────────
-    if [ ! -d "$SV_LATEST_DIR" ]; then
-        echo -e "  ${_FAIL} latest/ 디렉토리 없음: ${SV_LATEST_DIR}"
-        return 1
-    fi
+    _sv_need_latest || return 1
 
     local files=()
     while IFS= read -r f; do
@@ -158,18 +169,8 @@ _sv_list() {
     fi
 
     if command -v fzf &>/dev/null; then
-        local selected
-        selected=$(printf '%s\n' "${files[@]}" | \
-            fzf --ansi \
-                --prompt="📋 최신 규격서 선택 (Enter=열기) > " \
-                --preview="basename {}" \
-                --preview-window=up:1 \
-                --color="prompt:cyan,pointer:green")
-        if [ -n "$selected" ]; then
-            echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$selected")${_F_RST}"
-            xdg-open "$selected" 2>/dev/null || \
-                echo -e "  ${_WARN} xdg-open 실패. 경로: ${selected}"
-        fi
+        printf '%s\n' "${files[@]}" | \
+            _sv_fzf_pick "📋 최신 규격서 선택 (Enter=열기) > "
         return
     fi
 
@@ -179,11 +180,9 @@ _sv_list() {
     echo ""
     local i=1
     for f in "${files[@]}"; do
-        local base ver
-        base=$(basename "$f")
+        local base="${f##*/}" ver=''
         [[ "$base" =~ V([0-9]+\.[0-9]+(\.[0-9]+)?) ]] \
-            && ver=" ${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}" \
-            || ver=''
+            && ver=" ${_F_CYAN}V${BASH_REMATCH[1]}${_F_RST}"
         printf "  ${_F_BOLD}[%d]${_F_RST}  ${_F_WHITE}%s${_F_RST}%b\n" "$i" "$base" "$ver"
         ((i++))
     done
@@ -196,10 +195,7 @@ _sv_list() {
 #  check — latest/ 심볼릭 링크 유효성 검사
 # ============================================================================
 _sv_check() {
-    if [ ! -d "$SV_LATEST_DIR" ]; then
-        echo -e "  ${_FAIL} latest/ 디렉토리 없음: ${SV_LATEST_DIR}"
-        return 1
-    fi
+    _sv_need_latest || return 1
 
     echo ""
     _hd "🔍  latest/ 링크 유효성 검사"
@@ -208,17 +204,15 @@ _sv_check() {
     local ok=0 broken=0
     for f in "$SV_LATEST_DIR"/*; do
         [ -e "$f" ] || [ -L "$f" ] || continue
-        [[ "$f" == *.md ]] && continue
-        [[ "$f" == *.xlsx ]] && continue
+        [[ "$f" == *.pdf ]] || continue   # PDF만 검사
 
-        local base
-        base=$(basename "$f")
+        local base="${f##*/}"
 
         if [ -L "$f" ]; then
             local target
             target=$(readlink -f "$f" 2>/dev/null)
             if [ -f "$target" ]; then
-                echo -e "  ${_OK}  ${_F_WHITE}${base}${_F_RST}  ${_F_DIM}→ $(basename "$target")${_F_RST}"
+                echo -e "  ${_OK}  ${_F_WHITE}${base}${_F_RST}  ${_F_DIM}→ ${target##*/}${_F_RST}"
                 ((ok++))
             else
                 echo -e "  ${_FAIL}  ${_F_RED}${base}${_F_RST}  ${_F_DIM}→ 링크 깨짐${_F_RST}"
@@ -251,17 +245,12 @@ _sv_open() {
         return 1
     fi
 
-    if [ ! -d "$SV_LATEST_DIR" ]; then
-        echo -e "  ${_FAIL} latest/ 디렉토리 없음"
-        return 1
-    fi
+    _sv_need_latest || return 1
 
-    # latest/ 에서 키워드 매칭 파일 검색
     local matches=()
     while IFS= read -r f; do
         matches+=("$f")
-    done < <(find "$SV_LATEST_DIR" -type f -o -type l 2>/dev/null \
-        | grep -i "$keyword" | sort)
+    done < <(find "$SV_LATEST_DIR" \( -type f -o -type l \) -iname "*${keyword}*" 2>/dev/null | sort)
 
     if [ ${#matches[@]} -eq 0 ]; then
         echo -e "  ${_FAIL} '${keyword}' 매칭 파일 없음 (latest/ 검색)"
@@ -270,28 +259,21 @@ _sv_open() {
     fi
 
     if [ ${#matches[@]} -eq 1 ]; then
-        local f="${matches[0]}"
-        echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$f")${_F_RST}"
-        xdg-open "$f" 2>/dev/null || \
-            echo -e "  ${_WARN} xdg-open 실패. 경로: ${f}"
+        _sv_open_file "${matches[0]}"
         return
     fi
 
-    # 여러 개 매칭 → 선택
     echo ""
     echo -e "  '${keyword}' 매칭 파일 ${#matches[@]}개:"
     local i=1
     for f in "${matches[@]}"; do
-        echo -e "    ${_F_BOLD}[${i}]${_F_RST}  $(basename "$f")"
+        echo -e "    ${_F_BOLD}[${i}]${_F_RST}  ${f##*/}"
         ((i++))
     done
     printf "  번호 선택 [1-%d]: " "${#matches[@]}"
     read -r sel
     if [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#matches[@]}" ]; then
-        local f="${matches[$((sel-1))]}"
-        echo -e "  ${_RUN} 열기: ${_F_CYAN}$(basename "$f")${_F_RST}"
-        xdg-open "$f" 2>/dev/null || \
-            echo -e "  ${_WARN} xdg-open 실패. 경로: ${f}"
+        _sv_open_file "${matches[$((sel-1))]}"
     else
         echo -e "  ${_F_DIM}취소${_F_RST}"
     fi
@@ -306,13 +288,15 @@ _sv_help() {
     echo -e "  ${_F_BOLD}사용법:${_F_RST}  specver [명령] [인자]"
     echo ""
     echo -e "  ${_F_CYAN}(없음)${_F_RST}             latest/ 규격서 버전 목록 출력"
-    echo -e "  ${_F_CYAN}list${_F_RST}               Document/ 전체 버전 PDF 목록"
+    echo -e "  ${_F_CYAN}list${_F_RST}               latest/ 최신본 목록 (fzf 또는 텍스트)"
+    echo -e "  ${_F_CYAN}list all${_F_RST}           Document/ 전체 버전 PDF 목록"
     echo -e "  ${_F_CYAN}check${_F_RST}              latest/ 심볼릭 링크 유효성 검사"
     echo -e "  ${_F_CYAN}open <키워드>${_F_RST}       키워드로 규격서 찾아서 열기"
     echo ""
     echo -e "  ${_F_BOLD}예시:${_F_RST}"
     echo -e "    ${_F_DIM}specver${_F_RST}              현재 최신 버전 한눈에 보기"
-    echo -e "    ${_F_DIM}specver list${_F_RST}          Document/ 전체 PDF 스캔"
+    echo -e "    ${_F_DIM}specver list${_F_RST}          최신본 fzf 선택"
+    echo -e "    ${_F_DIM}specver list all${_F_RST}      Document/ 전체 PDF 스캔"
     echo -e "    ${_F_DIM}specver check${_F_RST}         링크 깨진 파일 확인"
     echo -e "    ${_F_DIM}specver open 기능규격${_F_RST}  키워드로 PDF 열기"
     echo -e "    ${_F_DIM}specver open Web${_F_RST}      WebManager 규격 열기"
@@ -330,7 +314,5 @@ case "${1:-}" in
     open)           shift; _sv_open "$@" ;;
     help|--help|-h) _sv_help ;;
     '')             _sv_show ;;
-    *)
-        # 인자 있으면 open 단축으로 처리
-        _sv_open "$@" ;;
+    *)              _sv_open "$@" ;;
 esac
