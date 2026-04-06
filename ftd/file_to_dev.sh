@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.8'
+FTD_VERSION='2.5.9'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -271,8 +271,8 @@ _ftd_init() {
     echo -e "${_RUN} ${_F_BOLD}[7/9]${_F_RST} SecureCRT 명령 전송 방식"
     echo ""
     echo -e "  ${_F_WHITE}AP에 명령을 어떻게 전송할까요?${_F_RST}"
-    echo -e "  ${_F_CYAN}1)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+Shift+V ${_F_GREEN}(권장, 빠름)${_F_RST}"
-    echo -e "  ${_F_CYAN}2)${_F_RST} type  ${_F_DIM}xdotool type 직접 입력 — xclip 없을 때 (Plan B)${_F_RST}"
+    echo -e "  ${_F_CYAN}1)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+V ${_F_GREEN}(권장, 빠름)${_F_RST}"
+    echo -e "  ${_F_CYAN}2)${_F_RST} type  ${_F_DIM}xdotool type 직접 입력 — clip 안 될 때 (느림)${_F_RST}"
     echo -ne "  선택 (Enter=1): "
     read -r paste_mode_sel
     local new_paste_mode
@@ -383,7 +383,7 @@ FTD_SYSUPGRADE_OPTS=''
 # dv 명령 통합: on / off
 FTD_DV_INTEGRATION='${new_dv_integration}'
 
-# CRT 명령 전송 방식: clip (클립보드 Ctrl+Shift+V, 권장) / type (xdotool 직접 입력)
+# CRT 명령 전송 방식: clip (클립보드 Ctrl+V, 권장) / type (xdotool 직접 입력, 느림)
 FTD_CRT_PASTE_MODE='${new_paste_mode}'
 
 # 등록된 단축어
@@ -708,9 +708,10 @@ _ftd_pick_file() {
 
 _ftd_fzf_select() {
     local header="${1:-[ 선택 ]}"
+    shift
     if command -v fzf &>/dev/null; then
         fzf --cycle --height 50% --reverse --border \
-            --header "$header (Esc=취소)" --prompt "선택 > "
+            --header "$header (Esc=취소)" --prompt "선택 > " "$@"
     else
         local arr; IFS=$'\n' read -r -d '' -a arr || true
         echo -e "${_F_YELLOW}${header}${_F_RST}" >&2
@@ -990,15 +991,13 @@ _ftd_find_crt_window() {
         [ -z "$first_wid" ] && first_wid="$wid" && first_title="$title"
         if echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
             local resolved_wid="$wid"
-            # xdotool type은 실제 입력을 받는 child로 보내야 동작함.
-            # clip 모드(Ctrl+Shift+V)는 parent 창으로 충분 — child 탐색 불필요.
-            if [ "${FTD_CRT_PASTE_MODE:-type}" != "clip" ]; then
-                local hex_child
-                hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
-                    | grep -m1 -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
-                    | grep -m1 -oP '0x[0-9a-f]+')
-                [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
-            fi
+            # SecureCRT는 frame(parent)과 terminal widget(child)이 분리됨.
+            # type/clip 모두 child로 보내야 키 입력이 동작함.
+            local hex_child
+            hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
+                | grep -m1 -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
+                | grep -m1 -oP '0x[0-9a-f]+')
+            [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
             _CRT_WINDOW_TITLE="$title"
             echo "$resolved_wid"
             return 0
@@ -1041,7 +1040,7 @@ _ftd_crt_paste() {
     sleep 0.2
     if [ "${FTD_CRT_PASTE_MODE:-clip}" = "clip" ]; then
         _ftd_clip_write "$cmd"
-        xdotool key --clearmodifiers --window "$wid" ctrl+shift+v 2>/dev/null
+        xdotool key --clearmodifiers --window "$wid" ctrl+v 2>/dev/null
         sleep 0.1
     else
         # type 모드: xdotool type 직접 입력 (xclip 없거나 Ctrl+Shift+V 불가 환경)
@@ -1360,9 +1359,14 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up [AP_IP]"  "AP IP 직접 지정 (ex: up 192.168.1.254)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "file"        "tftpboot 파일 fzf 선택 → AP wget"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "file <name>" "파일 지정 전송 (sysupgrade 없음)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp fw"      "FW_DIR에서 선택 → FW_NAME으로 이름 변환 복사"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp <path>"  "로컬 파일 → tftpboot 복사"
-    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp"         "fzf로 파일 선택 → tftpboot 복사"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp"         "FW_DIR(또는 현재 디렉토리) fzf 선택 → tftpboot 복사"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cp ."       "현재 디렉토리 .img/.bin/.zip 전부 복사"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp"           "현재 디렉토리 fzf → 저장된 목적지(기본: tftpboot)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp set <dir>" "목적지 저장 (이후 tcp 기본값으로 사용)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp set reset" "저장된 목적지 초기화 → tftpboot"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp -s <dir>"  "일회성 목적지 변경 (저장 안 함)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cmd <명령>"  "AP에 임의 명령 전송 (CRT 자동붙여넣기/클립보드)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "preset"     "상용구 관리 (list/set/rm)  →  ap <이름> 으로 호출"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
@@ -1392,6 +1396,19 @@ _ftd_help() {
     echo ""
 }
 
+# FW_DIR / FTD_FW_DIR 결정 헬퍼. 없으면 $1(fallback) 출력, 미설정 에러 시 return 1
+_ftd_resolve_fw_dir() {
+    local fallback="${1:-}"
+    if   [ -n "${FW_DIR:-}"     ] && [ -d "$FW_DIR"     ]; then echo "$FW_DIR"
+    elif [ -n "${FTD_FW_DIR:-}" ] && [ -d "$FTD_FW_DIR" ]; then echo "$FTD_FW_DIR"
+    elif [ -n "$fallback" ];                                then echo "$fallback"
+    else return 1
+    fi
+}
+
+# img/zip 후보 목록 → cnt 반환 헬퍼 (빈 string 오탐 방지)
+_ftd_count_lines() { [ -z "$1" ] && echo 0 || echo "$1" | wc -l | tr -d ' '; }
+
 # ══════════════════════════════════════════════════════════════════════════
 #  CP — 로컬 파일 → tftpboot 복사
 # ══════════════════════════════════════════════════════════════════════════
@@ -1399,16 +1416,50 @@ _ftd_cp() {
     _ftd_load_conf
     local target="${1:-}"
 
+    if [ "$target" = "fw" ]; then
+        local src_dir
+        src_dir=$(_ftd_resolve_fw_dir) || { echo -e "${_FAIL} FW 디렉토리 없음 (FW_DIR / FTD_FW_DIR 미설정)"; return 1; }
+        local candidates
+        candidates=$(ls -t "${src_dir}"/*.img "${src_dir}"/*.zip 2>/dev/null \
+            | grep -v '_raw\b\|_single\b')
+        local cnt; cnt=$(_ftd_count_lines "$candidates")
+        echo -e "${_RUN} FW 파일 선택 (${_F_CYAN}${src_dir}${_F_RST})..."
+        local sel
+        if [ "$cnt" -eq 0 ]; then
+            echo -e "${_FAIL} ${src_dir} 에 .img/.zip 없음"; return 1
+        elif [ "$cnt" -eq 1 ]; then
+            sel="$candidates"
+            echo -e "${_RUN} 자동 선택: ${_F_GREEN}$(basename "$sel")${_F_RST}"
+        else
+            sel=$(echo "$candidates" | head -5 \
+                | _ftd_fzf_select "[ fw로 복사할 파일 선택 ]" --delimiter '/' --with-nth -1) || return 1
+        fi
+        [ -z "$sel" ] && echo -e "${_FAIL} 선택 파일 없음" && return 1
+        local dest_name="${FTD_FW_NAME:-${FW_NAME:-$(basename "$sel")}}"
+        cp -a "$sel" "${FTD_TFTP_PATH}/${dest_name}"
+        echo -e "${_OK} ${_F_GREEN}$(basename "$sel")${_F_RST} → ${_F_UL}${FTD_TFTP_PATH}/${dest_name}${_F_RST}"
+        return
+    fi
+
     if [ -z "$target" ]; then
-        # 인자 없음 → fzf로 파일 선택 (현재 디렉토리 기준)
-        echo -e "${_RUN} fzf로 복사할 파일 선택..."
-        target=$(find . -maxdepth 4 -type f 2>/dev/null \
-            | grep -v '\.git\|\.svn' \
-            | _ftd_fzf_select "[ tftpboot에 복사할 파일 선택 ]") || return 1
+        local src_dir
+        src_dir=$(_ftd_resolve_fw_dir ".")
+        local candidates
+        candidates=$(ls -t "${src_dir}"/*.img "${src_dir}"/*.zip 2>/dev/null | grep -v '_raw\b')
+        local cnt; cnt=$(_ftd_count_lines "$candidates")
+        if [ "$cnt" -eq 0 ]; then
+            echo -e "${_WARN} ${src_dir} 에 .img/.zip 없음"; return 1
+        elif [ "$cnt" -eq 1 ]; then
+            target="$candidates"
+            echo -e "${_RUN} 자동 선택: ${_F_GREEN}$(basename "$target")${_F_RST}"
+        else
+            echo -e "${_RUN} fzf로 복사할 파일 선택 (${_F_CYAN}${src_dir}${_F_RST})..."
+            target=$(echo "$candidates" | head -10 \
+                | _ftd_fzf_select "[ tftpboot에 복사할 파일 선택 ]" --delimiter '/' --with-nth -1) || return 1
+        fi
         [ -z "$target" ] && return 0
     fi
 
-    # 점(.) = 현재 디렉토리 .img 전부
     if [ "$target" = "." ]; then
         local count=0
         for f in ./*.img ./*.bin ./*.zip; do
@@ -1420,7 +1471,7 @@ _ftd_cp() {
         return
     fi
 
-    # 경로 확인
+    # ── 경로 지정 복사 ────────────────────────────────────────────────────────
     local src="${target/#\~/$HOME}"
     if [ ! -f "$src" ]; then
         echo -e "${_FAIL} 파일 없음: ${src}"
@@ -1578,6 +1629,80 @@ _ftd_reboot() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+#  TCP — 현재 디렉토리 → 목적지 복사 (기본: tftpboot)
+# ══════════════════════════════════════════════════════════════════════════
+#  dv tcp            현재 디렉토리 파일 fzf → /tftpboot
+#  dv tcp -s <dir>   목적지 변경 (ex: dv tcp -s /var/www)
+#  dv tcp <file>     파일 직접 지정
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_tcp() {
+    _ftd_load_conf
+    local TCP_DEST_FILE="${FTD_CONF_DIR}/tcp_dest"
+
+    # ── set 서브커맨드 ─────────────────────────────────────────────────────
+    if [ "${1:-}" = "set" ]; then
+        if [ "${2:-}" = "reset" ]; then
+            rm -f "$TCP_DEST_FILE"
+            echo -e "${_OK} tcp 목적지 초기화 → ${_F_CYAN}${FTD_TFTP_PATH}${_F_RST} (기본값)"
+        elif [ -n "${2:-}" ]; then
+            local new_dest="${2%/}"
+            if [ ! -d "$new_dest" ]; then
+                echo -e "${_FAIL} 디렉토리 없음: ${new_dest}"; return 1
+            fi
+            echo "$new_dest" > "$TCP_DEST_FILE"
+            echo -e "${_OK} tcp 기본 목적지 저장: ${_F_CYAN}${new_dest}${_F_RST}"
+        else
+            local saved_dest=""
+            [ -f "$TCP_DEST_FILE" ] && read -r saved_dest < "$TCP_DEST_FILE"
+            if [ -n "$saved_dest" ]; then
+                echo -e "  현재 저장된 목적지: ${_F_CYAN}${saved_dest}${_F_RST}"
+            else
+                echo -e "  저장된 목적지 없음 (기본값: ${_F_CYAN}${FTD_TFTP_PATH}${_F_RST})"
+            fi
+            echo -e "  ${_F_DIM}변경: dv tcp set <경로>  /  초기화: dv tcp set reset${_F_RST}"
+        fi
+        return 0
+    fi
+
+    local dest="$FTD_TFTP_PATH"
+    [ -f "$TCP_DEST_FILE" ] && read -r dest < "$TCP_DEST_FILE"
+
+    # -s 옵션으로 일회성 목적지 변경
+    local OPTIND opt
+    while getopts ":s:" opt; do
+        case "$opt" in
+            s) dest="${OPTARG%/}" ;;
+            *) echo -e "${_WARN} 알 수 없는 옵션: -${OPTARG}"; return 1 ;;
+        esac
+    done
+    shift $((OPTIND - 1))
+
+    if [ ! -d "$dest" ]; then
+        echo -e "${_FAIL} 목적지 디렉토리 없음: ${dest}"
+        return 1
+    fi
+
+    local target="${1:-}"
+
+    if [ -z "$target" ]; then
+        target=$(find . -maxdepth 1 -type f 2>/dev/null \
+            | sed 's|^\./||' | sort \
+            | _ftd_fzf_select "[ → ${dest} ]") || return 1
+    fi
+
+    [ -z "$target" ] && return 0
+
+    local src="${target/#\~/$HOME}"
+    if [ ! -f "$src" ]; then
+        echo -e "${_FAIL} 파일 없음: ${src}"
+        return 1
+    fi
+
+    cp -a "$src" "${dest}/"
+    echo -e "${_OK} ${_F_GREEN}$(basename "$src")${_F_RST} → ${_F_UL}${dest}${_F_RST}"
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 #  CLEAN — tftpboot 오래된 파일 정리
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_clean() {
@@ -1642,6 +1767,7 @@ function _dv_extended_ftd() {
         up)     _ftd_dv_up "${@:2}" ;;
         file)   _ftd_dv_file "${@:2}" ;;
         cp)     _ftd_cp "${@:2}" ;;
+        tcp)    _ftd_tcp "${@:2}" ;;
         cmd)    _ftd_cmd "${@:2}" ;;
         reboot) _ftd_reboot ;;
         clean)  _ftd_clean ;;
@@ -1682,6 +1808,7 @@ _ftd_main() {
         up)           _ftd_up "${@:2}" ;;
         file)         _ftd_file "${@:2}" ;;
         cp)           _ftd_cp "${@:2}" ;;
+        tcp)          _ftd_tcp "${@:2}" ;;
         cmd)          _ftd_cmd "${@:2}" ;;
         preset)       _ftd_preset_main "${@:2}" ;;
         reboot)       _ftd_reboot ;;

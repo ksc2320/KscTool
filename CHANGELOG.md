@@ -90,6 +90,14 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.9] — 2026-04-06
+
+#### Fixed
+- `_ftd_crt_paste`: `ctrl+shift+v` → `ctrl+v` 수정 — SecureCRT는 Ctrl+V 붙여넣기 사용
+- `_ftd_find_crt_window`: clip 모드도 child 창 탐색 복구 — child로 보내야 키 입력 동작
+
+---
+
 ### [2.5.8] — 2026-04-03
 
 #### Fixed
