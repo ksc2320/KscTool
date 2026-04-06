@@ -90,6 +90,14 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.5.10] — 2026-04-06
+
+#### Fixed
+- `_ftd_crt_paste`: 기본값 `type` 복귀, delay 20ms → 1ms — clip(ctrl+v)은 SecureCRT에서 동작 안 함, type이 범용적이며 delay 줄여서 체감 속도 문제 해결
+- `_ftd_find_crt_window`: child 창 탐색 유지 (type 모드 정상 동작에 필요)
+
+---
+
 ### [2.5.9] — 2026-04-06
 
 #### Fixed

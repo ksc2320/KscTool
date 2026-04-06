@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.9'
+FTD_VERSION='2.5.10'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -84,7 +84,7 @@ FTD_MANAGE_HTTP='off'
 FTD_SYSUPGRADE_OPTS=''
 FTD_DV_INTEGRATION='auto'
 FTD_ALIAS='ftd'
-FTD_CRT_PASTE_MODE='clip'
+FTD_CRT_PASTE_MODE='type'
 
 # ── conf 로드 ─────────────────────────────────────────────────────────────
 _ftd_load_conf() {
@@ -271,14 +271,14 @@ _ftd_init() {
     echo -e "${_RUN} ${_F_BOLD}[7/9]${_F_RST} SecureCRT 명령 전송 방식"
     echo ""
     echo -e "  ${_F_WHITE}AP에 명령을 어떻게 전송할까요?${_F_RST}"
-    echo -e "  ${_F_CYAN}1)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+V ${_F_GREEN}(권장, 빠름)${_F_RST}"
-    echo -e "  ${_F_CYAN}2)${_F_RST} type  ${_F_DIM}xdotool type 직접 입력 — clip 안 될 때 (느림)${_F_RST}"
+    echo -e "  ${_F_CYAN}1)${_F_RST} type  ${_F_DIM}xdotool type 직접 입력 ${_F_GREEN}(권장, 범용)${_F_RST}"
+    echo -e "  ${_F_CYAN}2)${_F_RST} clip  ${_F_DIM}클립보드 + Ctrl+V — SecureCRT가 Ctrl+V 붙여넣기 지원 시${_F_RST}"
     echo -ne "  선택 (Enter=1): "
     read -r paste_mode_sel
     local new_paste_mode
     case "${paste_mode_sel:-1}" in
-        2) new_paste_mode="type" ;;
-        *) new_paste_mode="clip" ;;
+        2) new_paste_mode="clip" ;;
+        *) new_paste_mode="type" ;;
     esac
     echo -e "  ${_OK} ${_F_GREEN}${new_paste_mode}${_F_RST}"
     echo ""
@@ -383,7 +383,7 @@ FTD_SYSUPGRADE_OPTS=''
 # dv 명령 통합: on / off
 FTD_DV_INTEGRATION='${new_dv_integration}'
 
-# CRT 명령 전송 방식: clip (클립보드 Ctrl+V, 권장) / type (xdotool 직접 입력, 느림)
+# CRT 명령 전송 방식: type (xdotool 직접 입력, 권장) / clip (클립보드 Ctrl+V)
 FTD_CRT_PASTE_MODE='${new_paste_mode}'
 
 # 등록된 단축어
@@ -1038,13 +1038,14 @@ _ftd_crt_paste() {
     local cmd="$1" wid="$2"
     xdotool windowfocus --sync "$wid" 2>/dev/null
     sleep 0.2
-    if [ "${FTD_CRT_PASTE_MODE:-clip}" = "clip" ]; then
+    if [ "${FTD_CRT_PASTE_MODE:-type}" = "clip" ]; then
+        # clip 모드: 클립보드 복사 후 Ctrl+V (SecureCRT가 ctrl+v 붙여넣기를 지원하는 환경)
         _ftd_clip_write "$cmd"
         xdotool key --clearmodifiers --window "$wid" ctrl+v 2>/dev/null
         sleep 0.1
     else
-        # type 모드: xdotool type 직접 입력 (xclip 없거나 Ctrl+Shift+V 불가 환경)
-        xdotool type --clearmodifiers --delay 20 --window "$wid" "$cmd" 2>/dev/null
+        # type 모드(기본): xdotool type 직접 입력 — delay 1ms로 빠르게 전송
+        xdotool type --clearmodifiers --delay 1 --window "$wid" "$cmd" 2>/dev/null
         sleep 0.05
     fi
     xdotool key --clearmodifiers --window "$wid" Return 2>/dev/null
