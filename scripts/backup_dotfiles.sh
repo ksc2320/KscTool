@@ -37,6 +37,14 @@ cp -f "$CLAUDE_SRC/settings.json"  "$DEST/claude/settings.json"
 # hooks 폴더 동기화
 rsync -a --delete "$CLAUDE_SRC/hooks/" "$DEST/claude/hooks/"
 
+# projects 폴더 — memory/, plans/ 만 백업 (.jsonl 대화록 제외)
+rsync -a --delete --delete-excluded --prune-empty-dirs \
+  --include='*/' \
+  --include='*/memory/***' \
+  --include='*/plans/***' \
+  --exclude='*' \
+  "$CLAUDE_SRC/projects/" "$DEST/claude/projects/"
+
 # ── git commit & push ─────────────────────────────────────
 cd "$DEST"
 
