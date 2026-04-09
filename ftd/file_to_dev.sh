@@ -1369,6 +1369,7 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp set reset" "저장된 목적지 초기화 → tftpboot"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp -s <dir>"  "일회성 목적지 변경 (저장 안 함)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cmd <명령>"  "AP에 임의 명령 전송 (CRT 자동붙여넣기/클립보드)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "dbg <pkg>"   "build_dir 산출물 핫스왑 (cp→wget→chmod→실행)  ex: fwdc dvmgmt"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "preset"     "상용구 관리 (list/set/rm)  →  ap <이름> 으로 호출"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "clean"      "tftpboot 파일 정리 (fzf 다중 선택 삭제)"
@@ -1551,6 +1552,12 @@ _ftd_cmd() {
     _ftd_load_conf
     local raw="${*}"
 
+    # 디버그 타깃 후킹 (preset보다 우선) — fwdc dvmgmt
+    # 옵션이 필요하면 `fwd dbg dvmgmt -- <opts>` 사용
+    case "$raw" in
+        dvmgmt) _ftd_dbg dvmgmt; return $? ;;
+    esac
+
     # preset 확인 (단어 단위 매칭)
     local cmd="$raw"
     if [ -n "$raw" ]; then
@@ -1608,6 +1615,90 @@ _ftd_cmd() {
         done
     fi
     echo ""
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+#  DBG — 빌드된 유저영역 바이너리 핫스왑
+#  build_dir 산출물 → tftpboot → AP wget → chmod → 실행 (한 방에)
+#  사용: fwd dbg <pkg> [-- 실행옵션]   /   fwdc <pkg>  (예: fwdc dvmgmt)
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_dbg() {
+    _ftd_load_conf
+    local pkg="${1:?사용법: fwd dbg <pkg> [-- 실행옵션]}"; shift || true
+
+    # 실행 옵션: "--" 구분자 있으면 제거 후 나머지, 없으면 그대로
+    [ "${1:-}" = "--" ] && shift
+    local run_opts="$*"
+
+    # pkg → build_dir 경로 매핑 (확장 시 여기 추가)
+    local src
+    case "$pkg" in
+        dvmgmt)
+            src="/home/workspace/build_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/dv_pkg/dvmgmt/dvmgmt"
+            [ -z "$run_opts" ] && run_opts="-f -p"
+            ;;
+        *)
+            echo -e "${_FAIL} 알 수 없는 dbg 타깃: ${pkg}"
+            echo -e "  ${_F_DIM}지원: dvmgmt${_F_RST}"
+            return 1
+            ;;
+    esac
+
+    if [ ! -f "$src" ]; then
+        echo -e "${_FAIL} 빌드 산출물 없음: ${src}"
+        echo -e "  ${_F_DIM}먼저 빌드: make davo/feeds/davo/${pkg}/compile V=s${_F_RST}"
+        return 1
+    fi
+
+    local bin; bin=$(basename "$src")
+    local dest="${FTD_TFTP_PATH}/${bin}"
+
+    echo ""
+    _hd "🐛  dbg ${pkg} — 핫스왑"
+    echo -e "${_RUN} cp ${_F_DIM}${src}${_F_RST}"
+    echo -e "       → ${_F_UL}${dest}${_F_RST}"
+    cp -a "$src" "$dest" || { echo -e "${_FAIL} 복사 실패"; return 1; }
+    echo -e "${_OK} 복사 완료 ${_F_DIM}($(du -h "$dest" | awk '{print $1}'))${_F_RST}"
+
+    # HTTP 서버 보장
+    local server; server=$(_ftd_server_ip)
+    local port="$FTD_HTTP_PORT"
+    _ftd_check_http "$server" "$port" "$bin" || return 1
+
+    # 단계 정의 (배열로 안전하게 — _ftd_cmd 의 display printf 버그 우회)
+    # init.d stop 후 killall 로 잔재까지 제거 → 파일 교체 → 권한 → 실행
+    local -a dbg_steps=(
+        "/etc/init.d/${bin} stop 2>/dev/null; killall ${bin} 2>/dev/null; sleep 1"
+        "rm -f ${bin}"
+        "wget http://${server}:${port}/${bin}"
+        "chmod 755 ${bin}"
+        "./${bin} ${run_opts} &"
+    )
+
+    echo ""
+    echo -e "${_F_WHITE}  다단계 (${#dbg_steps[@]}단계):${_F_RST}"
+    local i
+    for i in "${!dbg_steps[@]}"; do
+        echo -e "  ${_F_DIM}[$((i+1))]${_F_RST} ${_F_SKY}${dbg_steps[$i]}${_F_RST}"
+    done
+    echo ""
+
+    # SecureCRT 창 감지 → 자동 붙여넣기 (없으면 클립보드 fallback)
+    local crt_wid; crt_wid=$(_ftd_find_crt_window)
+    if [ -n "$crt_wid" ]; then
+        local crt_title; crt_title=$(xdotool getwindowname "$crt_wid" 2>/dev/null)
+        local my_wid; my_wid=$(xdotool getactivewindow 2>/dev/null)
+        echo -e "${_RUN} CRT 자동 붙여넣기 ${_F_DIM}(${crt_title// - SecureCRT*/})${_F_RST}"
+        for step in "${dbg_steps[@]}"; do
+            _ftd_crt_paste "$step" "$crt_wid" || { echo -e "${_WARN} CRT 붙여넣기 실패"; return 1; }
+            sleep 0.6
+        done
+        [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
+        echo -e "${_OK} 전송 완료"
+    else
+        echo -e "${_WARN} SecureCRT 창 없음 — 수동 실행 필요 (위 단계 복사)"
+        return 1
+    fi
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -1811,6 +1902,7 @@ _ftd_main() {
         cp)           _ftd_cp "${@:2}" ;;
         tcp)          _ftd_tcp "${@:2}" ;;
         cmd)          _ftd_cmd "${@:2}" ;;
+        dbg)          _ftd_dbg "${@:2}" ;;
         preset)       _ftd_preset_main "${@:2}" ;;
         reboot)       _ftd_reboot ;;
         clean)        _ftd_clean ;;
