@@ -90,6 +90,15 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.6.0] — 2026-04-15
+
+#### Added
+- `fwd get <remote> [local]` / `fwdg` — AP→host 파일 회수 (AP-initiated tftp put). BusyBox `tftp -p`로 host tftpd(`/tftpboot`)에 push, 30s size-stable 폴링. 기존 파일은 `.bak` 자동 백업
+  - 배경: dropbear 비활성 이미지에서 scp 대체 경로 필요. `/tftpboot` 인프라 재활용
+  - 주의: tftpd `--create` 옵션 필수, `-r`는 tftpd 루트 기준 상대경로
+
+---
+
 ### [2.5.10] — 2026-04-06
 
 #### Fixed

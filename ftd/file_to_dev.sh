@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.5.10'
+FTD_VERSION='2.6.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1370,6 +1370,7 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "tcp -s <dir>"  "일회성 목적지 변경 (저장 안 함)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "cmd <명령>"  "AP에 임의 명령 전송 (CRT 자동붙여넣기/클립보드)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "dbg <pkg>"   "build_dir 산출물 핫스왑 (cp→wget→chmod→실행)  ex: fwdc dvmgmt"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "get <remote>" "AP→host tftp put (AP 파일을 tftpboot로 회수)  ex: fwdg /tmp/syslog"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "preset"     "상용구 관리 (list/set/rm)  →  ap <이름> 으로 호출"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "clean"      "tftpboot 파일 정리 (fzf 다중 선택 삭제)"
@@ -1702,6 +1703,82 @@ _ftd_dbg() {
 }
 
 # ══════════════════════════════════════════════════════════════════════════
+#  GET — AP → host 파일 회수 (AP-initiated tftp put)
+#  사용: fwd get <remote_path> [local_name]    /   fwdg <remote_path>
+#  전송: AP의 BusyBox tftp -p 로 host tftpd(/tftpboot)에 push
+# ══════════════════════════════════════════════════════════════════════════
+_ftd_get() {
+    _ftd_load_conf
+    local remote="${1:?사용법: fwd get <remote_path_on_AP> [local_name]}"
+    local local_name="${2:-$(basename "$remote")}"
+    local server; server=$(_ftd_server_ip)
+    local dest="${FTD_TFTP_PATH}/${local_name}"
+
+    echo ""
+    _hd "📥  get — ${remote} → ${dest}"
+
+    # 기존 파일 백업 (덮어쓰기 전)
+    if [ -f "$dest" ]; then
+        mv -f "$dest" "${dest}.bak"
+        echo -e "${_F_DIM}   기존 파일 백업: ${dest}.bak${_F_RST}"
+    fi
+
+    # 시작 시각 기록 (폴링 기준)
+    local t0; t0=$(date +%s)
+
+    # AP에 주입할 명령 (tftp put)
+    local tftp_cmd="tftp -p -l ${remote} -r ${local_name} ${server}"
+
+    echo -e "${_RUN} AP 명령 주입: ${_F_SKY}${tftp_cmd}${_F_RST}"
+
+    # CRT 자동 붙여넣기 (fallback: 클립보드)
+    local crt_wid; crt_wid=$(_ftd_find_crt_window)
+    if [ -n "$crt_wid" ]; then
+        local my_wid; my_wid=$(xdotool getactivewindow 2>/dev/null)
+        _ftd_crt_paste "$tftp_cmd" "$crt_wid" || { echo -e "${_FAIL} CRT 붙여넣기 실패"; return 1; }
+        [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
+    else
+        if _ftd_clip_write "$tftp_cmd"; then
+            echo -e "  ${_CLIP} 클립보드 복사 — SecureCRT에서 ${_F_WHITE}Ctrl+V${_F_RST} 후 Enter"
+        else
+            echo -e "  ${_WARN} xclip/CRT 없음 — 위 명령을 AP에 수동 실행"
+        fi
+    fi
+
+    # 수신 대기 (최대 30s, size stable 1s)
+    echo -ne "${_F_DIM}   수신 대기"
+    local prev_size=-1 cur_size=0 stable=0 waited=0
+    while [ "$waited" -lt 30 ]; do
+        if [ -f "$dest" ]; then
+            cur_size=$(stat -c %s "$dest" 2>/dev/null || echo 0)
+            if [ "$cur_size" -gt 0 ] && [ "$cur_size" -eq "$prev_size" ]; then
+                stable=$((stable+1))
+                [ "$stable" -ge 1 ] && break
+            else
+                stable=0
+            fi
+            prev_size=$cur_size
+        fi
+        sleep 1
+        waited=$((waited+1))
+        echo -ne "."
+    done
+    echo ""
+
+    if [ -f "$dest" ] && [ "$cur_size" -gt 0 ]; then
+        local elapsed=$(( $(date +%s) - t0 ))
+        echo -e "${_OK} 수신 완료 ${_F_DIM}($(du -h "$dest" | awk '{print $1}'), ${elapsed}s)${_F_RST}"
+        echo -e "       ${_F_UL}${dest}${_F_RST}"
+        return 0
+    else
+        echo -e "${_FAIL} 수신 실패 — 30s 내 파일 미도착"
+        echo -e "  ${_F_DIM}확인: AP에서 원격경로(${remote}) 존재? / host tftpd 실행? / 방화벽?${_F_RST}"
+        [ -f "${dest}.bak" ] && mv -f "${dest}.bak" "$dest" && echo -e "  ${_F_DIM}백업 복원됨${_F_RST}"
+        return 1
+    fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════
 #  REBOOT — AP 재부팅
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_reboot() {
@@ -1861,6 +1938,7 @@ function _dv_extended_ftd() {
         cp)     _ftd_cp "${@:2}" ;;
         tcp)    _ftd_tcp "${@:2}" ;;
         cmd)    _ftd_cmd "${@:2}" ;;
+        get)    _ftd_get "${@:2}" ;;
         reboot) _ftd_reboot ;;
         clean)  _ftd_clean ;;
         *)      davo_macro_tool "$@" ;;
@@ -1903,6 +1981,7 @@ _ftd_main() {
         tcp)          _ftd_tcp "${@:2}" ;;
         cmd)          _ftd_cmd "${@:2}" ;;
         dbg)          _ftd_dbg "${@:2}" ;;
+        get)          _ftd_get "${@:2}" ;;
         preset)       _ftd_preset_main "${@:2}" ;;
         reboot)       _ftd_reboot ;;
         clean)        _ftd_clean ;;
