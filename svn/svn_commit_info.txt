@@ -1,11 +1,17 @@
 [Jira 이슈]
+S1KTHOME-1015
 
 [작업 내용]
+[dvmgmt] 접속 단말 정보 페이지 무선 단말 SSID 미표기 수정
 
 [상세 설명]
+- r571 의 "과한 후처리 제거" 에서 1015 의 무선 SSID 처리 경로가 의도치 않게 같이 삭제되어, 접속 단말 정보 "포트 정보" 컬럼에 무선 단말 SSID 가 빈칸으로 표시되던 문제
+- get_sta_info_all 실패 fallback `fill_dv_stb_tbl_data_from_apstats` 복원 (apstats -d 로 무선 STA 테이블 보조)
+- check_sta_info_in_memory HIT 블록 끝에 port_str 빈 경우 netdev_name 으로 SSID 보강 — 실제 무선 단말이 port_no=6 으로 진입하는 케이스 커버
 
 [ADD_FILE]
 
 [MODIFY_FILE]
+build_dir/target-arm_cortex-a7+neon-vfpv4_musl_eabi/dv_pkg/dvmgmt/statistics/stats_sta_info.c
 
 [REMOVE_FILE]
