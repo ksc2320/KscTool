@@ -995,8 +995,7 @@ _ftd_find_crt_window() {
             # type/clip 모두 child로 보내야 키 입력이 동작함.
             local hex_child
             hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
-                | grep -m1 -P '^\s+0x[0-9a-f]+.*".*SecureCRT"' \
-                | grep -m1 -oP '0x[0-9a-f]+')
+                | awk '/^[[:space:]]+0x[0-9a-f]+.*".*SecureCRT"/ { print $1; exit }')
             [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
             _CRT_WINDOW_TITLE="$title"
             echo "$resolved_wid"
