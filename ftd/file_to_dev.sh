@@ -21,7 +21,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.6.0'
+FTD_VERSION='2.6.2'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -94,13 +94,17 @@ _ftd_load_conf
 
 # ── 네트워크 자동 감지 ────────────────────────────────────────────────────
 _ftd_detect_network() {
-    local enx_info
-    enx_info=$(ip -4 addr show 2>/dev/null | grep -A2 'enx' | grep 'inet ' | head -1)
-    _DETECTED_ENX_IF=$(ip link show 2>/dev/null | grep -oE 'enx[a-f0-9]+' | head -1)
-    if [ -n "$enx_info" ]; then
-        _DETECTED_HOST_IP=$(echo "$enx_info" | awk '{print $2}' | cut -d/ -f1)
+    local enx_line
+    # IPv4 주소를 실제로 가진 enx 인터페이스를 선택 → 이름과 IP 항상 일치
+    # (USB 랜카드 여러 개일 때 IP 없는 첫 enx를 잘못 고르던 문제 수정)
+    enx_line=$(ip -4 -o addr show 2>/dev/null | awk '/enx[a-f0-9]+/ && / inet /{print $2, $4; exit}')
+    if [ -n "$enx_line" ]; then
+        _DETECTED_ENX_IF=$(echo "$enx_line" | awk '{print $1}')
+        _DETECTED_HOST_IP=$(echo "$enx_line" | awk '{print $2}' | cut -d/ -f1)
         _DETECTED_AP_IP=$(echo "$_DETECTED_HOST_IP" | sed 's/\.[0-9]*$/.254/')
     else
+        # IP 없으면 링크에 존재하는 첫 enx 이름만 표시 (IP 미검출)
+        _DETECTED_ENX_IF=$(ip link show 2>/dev/null | grep -oE 'enx[a-f0-9]+' | head -1)
         _DETECTED_HOST_IP=""
         _DETECTED_AP_IP=""
     fi
@@ -1931,6 +1935,8 @@ _ftd_dv_file() {
 }
 
 function _dv_extended_ftd() {
+    # dv 진입점도 매 호출마다 재감지 (dv up 은 _ftd_main 을 거치지 않으므로 여기서 별도로)
+    _ftd_detect_network
     case "$1" in
         up)     _ftd_dv_up "${@:2}" ;;
         file)   _ftd_dv_file "${@:2}" ;;
@@ -1972,6 +1978,10 @@ _ftd_register() {
 #  MAIN — 실행 or 소싱 분기
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_main() {
+    # 매 호출마다 네트워크 재감지 — source 시점(line 112)의 1회 감지만으로는
+    # 셸 시작 후 enx 랜카드가 꽂히거나 IP가 늦게 할당/변경된 경우 낡은 캐시(→ 폴백 192.168.1.254 / 127.0.0.1)를
+    # 계속 쓰게 됨. ip 호출 2번뿐이라 비용은 무시할 수준.
+    _ftd_detect_network
     case "${1:-help}" in
         init)         _ftd_init ;;
         up)           _ftd_up "${@:2}" ;;
