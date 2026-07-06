@@ -1,0 +1,47 @@
+{
+  "name": "smoke",
+  "description": "Read-only AP smoke checks for boot, UCI, logs, and basic network state.",
+  "steps": [
+    {
+      "name": "ssh shell responds",
+      "command": "echo AP_DEBUG_OK",
+      "expect_regex": "AP_DEBUG_OK",
+      "save_as": "00_ssh.txt"
+    },
+    {
+      "name": "kernel and uptime",
+      "command": "uname -a; uptime",
+      "expect_regex": "Linux",
+      "save_as": "01_kernel_uptime.txt"
+    },
+    {
+      "name": "network uci summary",
+      "command": "uci show network 2>/dev/null | head -n 120",
+      "expect_exit": 0,
+      "save_as": "02_uci_network.txt",
+      "critical": false
+    },
+    {
+      "name": "interface status snapshot",
+      "command": "ifstatus wan 2>/dev/null || true; ifstatus wan6 2>/dev/null || true; ip addr show 2>/dev/null | head -n 160",
+      "expect_exit": 0,
+      "save_as": "03_ifstatus.txt",
+      "critical": false
+    },
+    {
+      "name": "recent kernel log has no crash signature",
+      "command": "dmesg | tail -n 250",
+      "expect_exit": 0,
+      "reject_regex": "Oops|Kernel panic|Call trace|BUG:",
+      "save_as": "04_dmesg_tail.txt",
+      "critical": false
+    },
+    {
+      "name": "recent system log snapshot",
+      "command": "logread 2>/dev/null | tail -n 250 || true",
+      "expect_exit": 0,
+      "save_as": "05_logread_tail.txt",
+      "critical": false
+    }
+  ]
+}

@@ -18,6 +18,9 @@ KscTool/
 ├── watch/                      # AP 로그 감시 도구
 │   ├── dvwatch.sh              # 로그 감시 (alias: dvwatch)
 │   └── dvcon.sh                # AP SSH 연결 (alias: dvcon)
+├── aptest/                     # AP 실기 디버그 테스트 하네스
+│   ├── aptest.sh               # 메인 (alias: aptest)
+│   └── suites/smoke.json       # 기본 read-only smoke suite
 ├── tools/                      # 기타 유틸리티
 │   ├── obs.sh                  # OBS 제어 (alias: obs)
 │   ├── gen_index.sh            # 인덱스 생성
@@ -36,6 +39,7 @@ KscTool/
 | `obs` | `tools/obs.sh` | OBS 제어 |
 | `dvwatch` | `watch/dvwatch.sh` | AP 로그 감시 |
 | `dvcon` | `watch/dvcon.sh` | AP SSH 연결 |
+| `aptest` | `aptest/aptest.sh` | AP 실기 디버그 테스트 하네스 |
 | `ucisnap` | `tools/ucisnap.sh` | UCI 설정 스냅샷/diff |
 | `spec` | `tools/spec.sh` | KT 규격서 버전 현황 / 열기 / 경로 / 스캔 |
 
@@ -83,6 +87,32 @@ dvwatch sessions                # 저장된 세션 목록
 
 설정: `~/.config/dvwatch/config` (없으면 ftd config 값 사용)
 저장: `~/.config/dvwatch/sessions/YYYYMMDD_HHMMSS.log`
+
+---
+
+## aptest — AP 실기 디버그 테스트 하네스
+
+Codex/Claude가 같은 방식으로 AP와 데이터를 주고받기 위한 테스트 진입점.
+
+```bash
+aptest status             # 대상 AP / live 실행 가드 확인
+aptest smoke              # 기본 smoke suite 미리보기(dry-run)
+aptest smoke --live       # 사용자가 명시적으로 실기 테스트를 요청한 경우에만 실행
+aptest script             # SSH 불가 시 AP 콘솔/시리얼용 스크립트 생성
+aptest credential         # 비밀번호 파일 해석 가능 여부 확인(값 출력 안 함)
+aptest login-file         # 첫 Enter 포함 콘솔 로그인 시퀀스 파일 생성
+aptest suite list         # suite 목록
+```
+
+설정: `~/.devtools/aptest/config`  
+결과: `~/.devtools/aptest/artifacts/`
+비밀번호 참조: `~/memo/personal/pswd/ap_pw.txt`의 설정 섹션을 실행 시점에만 읽음
+
+운영 규칙:
+- DV03-609H SVN에는 올리지 않는다.
+- 기본 실행은 dry-run이다.
+- 사용자가 직접 "테스트까지 직접해봐"라고 요청한 경우에만 `--live`를 붙인다.
+- 비밀번호 원문은 KscTool/Git에 저장하지 않는다.
 
 ---
 

@@ -1,0 +1,29 @@
+# ~/.devtools/aptest/config
+# AP 실기 디버그 테스트 기본 설정
+
+APTEST_HOST='172.30.1.254'
+APTEST_USER='root'
+APTEST_PORT='22'
+APTEST_CONNECT_TIMEOUT='5'
+APTEST_COMMAND_TIMEOUT='20'
+
+# 추가 ssh 옵션. 공백 포함 값은 따옴표로 감싼다.
+APTEST_SSH_OPTIONS='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts'
+
+# 기본 suite / 결과 저장 위치
+APTEST_DEFAULT_SUITE="$HOME/KscTool/aptest/suites/smoke.json"
+APTEST_ARTIFACT_DIR="$HOME/.devtools/aptest/artifacts"
+
+# 모델/비밀번호 참조.
+# 비밀번호 원문은 KscTool/Git에 넣지 않고 개인 파일에서 실행 시점에만 읽는다.
+APTEST_MODEL='DV03-609H'
+APTEST_PASSWORD_FILE="$HOME/memo/personal/pswd/ap_pw.txt"
+APTEST_PASSWORD_SECTION='KT'
+APTEST_PASSWORD_INDEX='1'
+
+# auto: password file에서 읽어 sshpass -e 사용. off: key/auth-agent 등만 사용.
+APTEST_SSH_PASSWORD='auto'
+
+# 콘솔/시리얼 입력 전에 Enter 한 번으로 프롬프트를 깨운다.
+APTEST_CONSOLE_WAKE_ENTER='on'
+APTEST_CONSOLE_LOGIN_OUTPUT="$HOME/.devtools/aptest/console_login.txt"

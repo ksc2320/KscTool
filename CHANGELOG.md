@@ -5,6 +5,39 @@
 
 ---
 
+## aptest (aptest.sh)
+
+### [1.1.0] — 2026-07-06
+
+#### 추가
+
+- DV03-609H 기본 모델을 KT 계열로 취급하고, `~/memo/personal/pswd/ap_pw.txt`를 런타임 비밀번호 소스로 참조
+- `aptest credential` — 비밀번호를 출력하지 않고 모델/섹션/인덱스 해석 가능 여부만 확인
+- `aptest login-file` — AP 콘솔/시리얼용 로그인 시퀀스 파일 생성
+- `APTEST_CONSOLE_WAKE_ENTER=on` — AP 입력 전 Enter 한 번으로 프롬프트를 깨우는 흐름 반영
+
+#### 보안
+
+- 비밀번호 값은 KscTool/Git에 저장하지 않음
+- SSH password 사용 시 Python 인자가 아니라 환경변수로만 전달
+
+### [1.0.0] — 2026-07-06
+
+#### 추가
+
+- `aptest status` — 대상 AP, 설정 파일, 결과 저장 위치, live 실행 가드 확인
+- `aptest smoke` — 기본 read-only smoke suite 미리보기(dry-run)
+- `aptest smoke --live` — 사용자가 명시적으로 실기 테스트를 요청한 경우 AP SSH 테스트 실행
+- `aptest script` — SSH가 막힌 이미지용 AP 콘솔/시리얼 실행 스크립트 생성
+- `suites/smoke.json` — shell 응답, kernel/uptime, UCI network, ifstatus, dmesg/logread 수집
+
+#### 운영 규칙
+
+- DV03-609H SVN이 아니라 `~/KscTool`에서 관리
+- Codex/Claude는 명시적 실기 테스트 요청이 없으면 live 실행 금지
+
+---
+
 ## ucisnap (ucisnap.sh)
 
 ### [1.0.0] — 2026-04-03

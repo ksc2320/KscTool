@@ -23,6 +23,7 @@ KscTool/
 ├── ftd/        # AP 파일 전송 (file_to_dev.sh)
 ├── svn/        # SVN 커밋 헬퍼
 ├── build/      # 빌드 도구
+├── aptest/     # AP 실기 디버그 테스트 하네스
 ├── tools/      # 기타 유틸
 ├── cpbak/      # 파일 백업/원복 도구
 ├── dotfiles/   # 공유 가능한 shell 설정 (.bashrc, .bash_aliases, .bash_functions)
@@ -36,6 +37,14 @@ KscTool/
 - `~/.bash_aliases` `#ksc_tools` 섹션에 alias 추가
 - `README.md` 표 업데이트
 - `CHANGELOG.md`에 버전 항목 추가
+
+**AP 실기 테스트 자동화 규칙:**
+- `~/KscTool/aptest/`를 공용 진입점으로 사용한다.
+- 사용자가 직접 "테스트까지 직접해봐", "AP에 붙어서 돌려봐", "실기 테스트 실행해봐"라고 말한 경우에만 `aptest smoke --live`를 실행한다.
+- 명시 요청이 없으면 `aptest smoke` dry-run, suite 작성, 문법 확인까지만 한다.
+- DV03-609H는 KT 모델로 보고 `~/memo/personal/pswd/ap_pw.txt`를 런타임 참조한다. 비밀번호 원문은 출력하거나 KscTool/Git에 저장하지 않는다.
+- 콘솔/시리얼 로그인은 AP가 입력을 받기 전에 Enter 한 번이 필요할 수 있으므로 `aptest login-file`의 wake Enter 설정을 사용한다.
+- DV03-609H SVN에는 aptest 파일을 올리지 않는다.
 
 **dotfiles 수정 시:**
 - `~/.bash_aliases`, `~/.bash_functions`, `~/.bashrc`에서 개인정보 없는지 확인
@@ -210,4 +219,4 @@ done
 
 ---
 
-_최종 갱신: 2026-04-06_ <!-- §3.3-3.4: 사용자 관점 패치노트 형식 추가 -->
+_최종 갱신: 2026-07-06_ <!-- aptest: AP 실기 테스트 하네스 운영 규칙 추가 -->
