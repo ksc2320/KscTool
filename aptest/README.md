@@ -28,12 +28,13 @@ source ~/.bash_aliases
 AP 주소가 다르면:
 
 ```bash
-aptest init --host 172.30.1.254 --user root --port 22 --force
+aptest init --host 172.30.1.254 --user root --port 6022 --force
 ```
 
 설정은 `~/.devtools/aptest/config`에 저장된다.
 기본 모델은 `DV03-609H`, 기본 비밀번호 섹션은 `KT`다.
 비밀번호 파일 기본값은 `~/memo/personal/pswd/ap_pw.txt`이며, 값은 화면에 출력하지 않는다.
+기본 포트는 `6022`다 — DV03-609H KT 모델의 dropbear 기본 `Port` 설정이 22가 아니라 6022이기 때문(`davo/files/etc/ori.config/dropbear`).
 
 ## 사용
 
@@ -80,6 +81,24 @@ aptest login-file
 기본 출력은 `~/.devtools/aptest/console_login.txt`다.
 `APTEST_CONSOLE_WAKE_ENTER=on`이면 첫 줄에 빈 Enter를 넣어 AP 프롬프트를 먼저 깨운다.
 파일 권한은 `600`으로 생성한다.
+
+### SSH가 매번 꺼져 있을 때 (`--enable-ssh`)
+
+DV03-609H KT 모델은 팩토리 기본값(`davo/files/etc/ori.config`,`fac.config`의 `dropbear`)이
+`enable '0'`이라 재플래시/팩토리리셋마다 SSH(dropbear)가 다시 꺼진다. 이 값은 여러 엔지니어가
+공유하는 SVN 브랜치 소스이므로 **개인 편의를 위해 절대 수정하지 않는다** — 로컬에서만 켜두는
+편법(주석, `svn changelist` 등)도 `svn commit`이 그대로 쓸어담을 수 있어 완전히 안전하지 않다.
+
+대신 로그인 시퀀스에 활성화 명령을 덧붙여 콘솔/시리얼 붙여넣기 한 번으로 끝낸다:
+
+```bash
+aptest login-file --enable-ssh
+```
+
+생성된 파일을 AP 콘솔/시리얼에 붙여넣으면 로그인 후 `uci set dropbear.main.enable=1` →
+`uci commit dropbear` → `/etc/init.d/dropbear enable` → `/etc/init.d/dropbear start`까지
+자동 실행된다. SVN 워킹카피에는 어떤 diff도 남지 않으므로 다른 사람의 빌드/브랜치에
+영향이 전혀 없다.
 
 ## suite 추가
 

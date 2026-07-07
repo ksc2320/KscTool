@@ -16,7 +16,7 @@
 #    version         버전 출력
 # ============================================================================
 
-APTEST_VERSION='1.1.0'
+APTEST_VERSION='1.2.0'
 
 _AT_RED='\033[1;31m'; _AT_GREEN='\033[1;32m'; _AT_YELLOW='\033[1;33m'
 _AT_CYAN='\033[1;36m'; _AT_WHITE='\033[1;37m'; _AT_DIM='\033[0;90m'
@@ -33,7 +33,7 @@ APTEST_RUNNER="$APTEST_HOME/runner.py"
 
 APTEST_HOST='172.30.1.254'
 APTEST_USER='root'
-APTEST_PORT='22'
+APTEST_PORT='6022'
 APTEST_CONNECT_TIMEOUT='5'
 APTEST_COMMAND_TIMEOUT='20'
 APTEST_SSH_OPTIONS='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts'
@@ -65,7 +65,7 @@ aptest — AP 실기 디버그 테스트 하네스
   aptest smoke [--live] [--suite PATH] [--keep-going]
   aptest script [--suite PATH] [--output /tmp/aptest_smoke.sh]
   aptest credential
-  aptest login-file [--output PATH]
+  aptest login-file [--output PATH] [--enable-ssh]
   aptest suite list
   aptest version
 
@@ -75,6 +75,9 @@ aptest — AP 실기 디버그 테스트 하네스
   - 비밀번호 원문은 출력하지 않고, 개인 password file에서 실행 시점에만 읽는다.
   - AP 콘솔 입력 전 깨우기 Enter가 필요하면 login-file에 빈 줄을 먼저 넣는다.
   - SSH가 막힌 이미지는 script 생성 후 AP 콘솔/시리얼에서 실행하고 fwdg/fwd get으로 회수한다.
+  - login-file --enable-ssh: 로그인 시퀀스 뒤에 dropbear enable+start uci 명령을 덧붙인다.
+    KT 팩토리 기본값(davo/files/etc/ori.config,fac.config/dropbear)이 SSH를 꺼놓으므로,
+    재플래시/팩토리리셋마다 다시 꺼진다. SVN 소스는 절대 건드리지 않고 콘솔/시리얼 붙여넣기로만 해결한다.
 EOF
 }
 
@@ -306,10 +309,11 @@ _aptest_script() {
 
 _aptest_login_file() {
     _aptest_load_conf
-    local output="$APTEST_CONSOLE_LOGIN_OUTPUT"
+    local output="$APTEST_CONSOLE_LOGIN_OUTPUT" enable_ssh=0
     while [ $# -gt 0 ]; do
         case "$1" in
             --output) output="$2"; shift ;;
+            --enable-ssh) enable_ssh=1 ;;
             -h|--help) _aptest_help; return 0 ;;
             *) echo -e "${_AT_WARN} unknown option: $1"; return 1 ;;
         esac
@@ -326,8 +330,19 @@ _aptest_login_file() {
         printf '\n' >> "$output"
     fi
     printf '%s\n%s\n' "$APTEST_USER" "$pw" >> "$output"
+    if [ "$enable_ssh" = "1" ]; then
+        {
+            printf 'uci set dropbear.main.enable=1\n'
+            printf 'uci commit dropbear\n'
+            printf '/etc/init.d/dropbear enable\n'
+            printf '/etc/init.d/dropbear start\n'
+        } >> "$output"
+    fi
     chmod 600 "$output"
     echo -e "${_AT_OK} wrote console login sequence: ${output}"
+    if [ "$enable_ssh" = "1" ]; then
+        echo -e "  ${_AT_DIM}dropbear enable+start 시퀀스 포함 (KT 팩토리 기본값은 SSH off, SVN 원본은 미변경)${_AT_RST}"
+    fi
     echo -e "  ${_AT_DIM}비밀번호는 출력하지 않음. 첫 줄 빈 Enter 포함 여부: ${APTEST_CONSOLE_WAKE_ENTER}${_AT_RST}"
 }
 

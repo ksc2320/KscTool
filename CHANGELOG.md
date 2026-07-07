@@ -7,6 +7,16 @@
 
 ## aptest (aptest.sh)
 
+### [1.2.0] — 2026-07-07
+
+#### 추가
+
+- `aptest login-file --enable-ssh` — 로그인 시퀀스 뒤에 dropbear enable/start uci 명령을 덧붙여, 콘솔/시리얼 붙여넣기 한 번으로 SSH를 켠다. DV03-609H KT 팩토리 기본값이 dropbear를 꺼두기 때문(재플래시/팩토리리셋마다 재발생). SVN 소스는 절대 수정하지 않아 다른 엔지니어의 빌드에 영향 없음.
+
+#### 수정
+
+- 기본 `APTEST_PORT`를 `22` → `6022`로 정정. DV03-609H KT dropbear 기본 `Port` 설정이 6022라서 기존 값으로는 SSH가 열려도 접속 실패.
+
 ### [1.1.0] — 2026-07-06
 
 #### 추가
