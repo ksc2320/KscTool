@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  aptest.sh — AP 실기 디버그 테스트 하네스 v1.3.0
+#  aptest.sh — AP 실기 디버그 테스트 하네스 v1.4.0
 # ============================================================================
 #  사용법: aptest <command> [args]
 #
@@ -17,7 +17,7 @@
 #    version         버전 출력
 # ============================================================================
 
-APTEST_VERSION='1.3.0'
+APTEST_VERSION='1.4.0'
 
 _AT_RED='\033[1;31m'; _AT_GREEN='\033[1;32m'; _AT_YELLOW='\033[1;33m'
 _AT_CYAN='\033[1;36m'; _AT_WHITE='\033[1;37m'; _AT_DIM='\033[0;90m'
@@ -37,7 +37,8 @@ APTEST_USER='root'
 APTEST_PORT='6022'
 APTEST_CONNECT_TIMEOUT='5'
 APTEST_COMMAND_TIMEOUT='20'
-APTEST_SSH_OPTIONS='-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=~/.ssh/known_hosts'
+# 개발 AP는 재플래시로 호스트키가 상시 변경 → known_hosts 검사 무의미(매번 충돌). 키 인증만 사용.
+APTEST_SSH_OPTIONS='-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o GlobalKnownHostsFile=/dev/null -o LogLevel=ERROR'
 APTEST_DEFAULT_SUITE="$APTEST_HOME/suites/smoke.json"
 APTEST_ARTIFACT_DIR="$APTEST_CONF_DIR/artifacts"
 APTEST_MODEL='DV03-609H'

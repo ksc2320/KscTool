@@ -7,6 +7,16 @@
 
 ## aptest (aptest.sh)
 
+### [1.4.0] — 2026-07-13
+
+#### 변경
+
+- 기본 `APTEST_SSH_OPTIONS`를 개발 AP용으로 변경: `StrictHostKeyChecking=no` + `UserKnownHostsFile=/dev/null`. 개발 AP는 재플래시할 때마다 호스트 키가 바뀌어 known_hosts가 매번 충돌(`Host key verification failed`)하는데, 검사해봐야 의미가 없어서 끈다. 인증은 SSH 공개키로만 한다.
+
+#### 실기 검증
+
+- **첫 --live 실기 6/6 PASS** (DV03-609H, 2026-07-13). 접속 3단 이슈 해소: dropbear OFF→콘솔 활성, 빈 비밀번호 dropbear 차단→공개키 인증, 재플래시 호스트키 변경→known_hosts 무시. 결과: `~/test/dv03_609h/ap_debug_smoke/RESULT.md`
+
 ### [1.3.0] — 2026-07-13
 
 #### 추가
