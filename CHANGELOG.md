@@ -7,6 +7,16 @@
 
 ## aptest (aptest.sh)
 
+### [1.3.0] — 2026-07-13
+
+#### 추가
+
+- `aptest ssh [원격명령...]` — AP로 SSH 접속하는 명령. 인자가 없으면 대화형 셸을 열고, 인자를 주면 원격 명령 한 번 실행 후 종료한다. 비밀번호는 기존 방식대로 개인 password 파일에서 실행 시점에만 읽어 환경변수(`SSHPASS`)로 sshpass에 전달하므로 프로세스 목록/화면에 노출되지 않는다.
+
+#### 수정
+
+- `login-file --enable-ssh`가 생성하는 uci 명령의 섹션명 오류 정정: `dropbear.main` → `dropbear.@dropbear[0]`. DV03-609H의 dropbear 설정 섹션은 이름 없는 섹션이라 기존 명령은 AP에서 Invalid argument로 실패한다.
+
 ### [1.2.0] — 2026-07-07
 
 #### 추가
@@ -132,6 +142,12 @@
 ---
 
 ## ftd (file_to_dev.sh)
+
+### [2.7.0] — 2026-07-13
+
+#### 추가
+
+- `dv ssh [원격명령...]` / `dv smoke [--live]` — aptest 위임 명령 추가 (`ftd ssh`/`ftd smoke`도 동일). 비밀번호 해석·포트(6022)·실기 가드 로직은 aptest가 소유하고 ftd는 진입점만 제공한다. aptest 미설치 환경에서는 안내 후 종료.
 
 ### [2.6.2] — 2026-07-02
 

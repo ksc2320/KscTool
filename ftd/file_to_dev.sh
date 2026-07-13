@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  file_to_dev.sh — AP 장치 펌웨어/파일 전송 도구 v2.3.0
+#  file_to_dev.sh — AP 장치 펌웨어/파일 전송 도구 v2.7.0
 # ============================================================================
 #  단독 실행:  ./file_to_dev.sh <command> [args]
 #  소싱(bash): source file_to_dev.sh  → 함수 등록 + dv 통합
@@ -12,6 +12,8 @@
 #    up -n     sysupgrade -n (설정 초기화 포함)
 #    up dry    dry-run (명령 미리보기만)
 #    file      tftpboot 파일 선택 → AP wget 전송
+#    ssh       AP SSH 접속 (aptest 위임 — 무인자=셸, 인자=원격 명령)
+#    smoke     AP smoke 테스트 (aptest 위임 — 기본 dry-run, --live 실기)
 #    set       설정 편집
 #    log       배포 이력 조회
 #    doctor    환경 진단 (패키지·설정·서버 상태)
@@ -21,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.6.2'
+FTD_VERSION='2.7.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1375,6 +1377,8 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "dbg <pkg>"   "build_dir 산출물 핫스왑 (cp→wget→chmod→실행)  ex: fwdc dvmgmt"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "get <remote>" "AP→host tftp put (AP 파일을 tftpboot로 회수)  ex: fwdg /tmp/syslog"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "preset"     "상용구 관리 (list/set/rm)  →  ap <이름> 으로 호출"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "ssh [명령]"  "AP SSH 접속 (무인자=셸, 인자=원격 명령. aptest 위임)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "smoke [--live]" "AP smoke 테스트 (기본 dry-run. aptest 위임)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "clean"      "tftpboot 파일 정리 (fzf 다중 선택 삭제)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "set"        "설정 편집 (IP·포트·시리얼 등)"
@@ -1934,6 +1938,16 @@ _ftd_dv_file() {
     _ftd_file "$@"
 }
 
+# aptest 위임 — dv ssh / dv smoke (비밀번호 해석·가드 로직은 aptest가 소유)
+_ftd_aptest() {
+    local ap="$HOME/KscTool/aptest/aptest.sh"
+    if [ ! -x "$ap" ]; then
+        echo -e "${_WARN} aptest 없음: $ap (KscTool aptest 필요)"
+        return 1
+    fi
+    "$ap" "$@"
+}
+
 function _dv_extended_ftd() {
     # dv 진입점도 매 호출마다 재감지 (dv up 은 _ftd_main 을 거치지 않으므로 여기서 별도로)
     _ftd_detect_network
@@ -1946,6 +1960,8 @@ function _dv_extended_ftd() {
         get)    _ftd_get "${@:2}" ;;
         reboot) _ftd_reboot ;;
         clean)  _ftd_clean ;;
+        ssh)    _ftd_aptest ssh "${@:2}" ;;
+        smoke)  _ftd_aptest smoke "${@:2}" ;;
         *)      davo_macro_tool "$@" ;;
     esac
 }
@@ -1994,6 +2010,8 @@ _ftd_main() {
         preset)       _ftd_preset_main "${@:2}" ;;
         reboot)       _ftd_reboot ;;
         clean)        _ftd_clean ;;
+        ssh)          _ftd_aptest ssh "${@:2}" ;;
+        smoke)        _ftd_aptest smoke "${@:2}" ;;
         set)          _ftd_set ;;
         log)          _ftd_log_show ;;
         doctor)       _ftd_doctor ;;

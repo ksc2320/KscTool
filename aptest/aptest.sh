@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-#  aptest.sh — AP 실기 디버그 테스트 하네스 v1.1.0
+#  aptest.sh — AP 실기 디버그 테스트 하네스 v1.3.0
 # ============================================================================
 #  사용법: aptest <command> [args]
 #
@@ -10,13 +10,14 @@
 #    smoke           기본 smoke suite 미리보기(dry-run)
 #    smoke --live    사용자가 명시적으로 요청했을 때만 실제 AP SSH 테스트
 #    script          SSH 불가 시 AP 콘솔/시리얼용 스크립트 생성
+#    ssh [명령...]   AP로 SSH 접속(무인자=대화형 셸, 인자=원격 명령 1회 실행)
 #    credential      모델 비밀번호 해석 가능 여부 확인(값 출력 안 함)
 #    login-file      콘솔/시리얼 붙여넣기용 로그인 시퀀스 파일 생성
 #    suite list      suite 목록
 #    version         버전 출력
 # ============================================================================
 
-APTEST_VERSION='1.2.0'
+APTEST_VERSION='1.3.0'
 
 _AT_RED='\033[1;31m'; _AT_GREEN='\033[1;32m'; _AT_YELLOW='\033[1;33m'
 _AT_CYAN='\033[1;36m'; _AT_WHITE='\033[1;37m'; _AT_DIM='\033[0;90m'
@@ -63,6 +64,7 @@ aptest — AP 실기 디버그 테스트 하네스
   aptest init [--force] [--host IP] [--user USER] [--port PORT]
   aptest status
   aptest smoke [--live] [--suite PATH] [--keep-going]
+  aptest ssh [원격명령...]
   aptest script [--suite PATH] [--output /tmp/aptest_smoke.sh]
   aptest credential
   aptest login-file [--output PATH] [--enable-ssh]
@@ -332,7 +334,7 @@ _aptest_login_file() {
     printf '%s\n%s\n' "$APTEST_USER" "$pw" >> "$output"
     if [ "$enable_ssh" = "1" ]; then
         {
-            printf 'uci set dropbear.main.enable=1\n'
+            printf "uci set dropbear.@dropbear[0].enable='1'\n"
             printf 'uci commit dropbear\n'
             printf '/etc/init.d/dropbear enable\n'
             printf '/etc/init.d/dropbear start\n'
@@ -346,6 +348,24 @@ _aptest_login_file() {
     echo -e "  ${_AT_DIM}비밀번호는 출력하지 않음. 첫 줄 빈 Enter 포함 여부: ${APTEST_CONSOLE_WAKE_ENTER}${_AT_RST}"
 }
 
+_aptest_ssh() {
+    _aptest_load_conf
+    local pw=""
+    if [ "${APTEST_SSH_PASSWORD:-auto}" = "auto" ]; then
+        pw="$(_aptest_resolve_password 2>/dev/null || true)"
+    elif [ "${APTEST_SSH_PASSWORD:-}" != "off" ]; then
+        pw="${APTEST_SSH_PASSWORD}"
+    fi
+    # APTEST_SSH_OPTIONS는 의도적으로 워드 스플릿 (runner.py와 동일 옵션 문자열 공유)
+    local -a cmd=(ssh $APTEST_SSH_OPTIONS -p "$APTEST_PORT" "${APTEST_USER}@${APTEST_HOST}")
+    if [ -n "$pw" ] && command -v sshpass >/dev/null 2>&1; then
+        SSHPASS="$pw" sshpass -e "${cmd[@]}" "$@"
+    else
+        [ -n "$pw" ] && echo -e "${_AT_WARN} sshpass 없음 — 비밀번호를 직접 입력해야 함 (apt install sshpass)"
+        "${cmd[@]}" "$@"
+    fi
+}
+
 _aptest_register() {
     _aptest_load_conf
     alias aptest='_aptest_main'
@@ -356,6 +376,7 @@ _aptest_main() {
         init) shift; _aptest_init "$@" ;;
         status) _aptest_status ;;
         smoke) shift; _aptest_smoke "$@" ;;
+        ssh) shift; _aptest_ssh "$@" ;;
         script) shift; _aptest_script "$@" ;;
         credential) _aptest_credential ;;
         login-file) shift; _aptest_login_file "$@" ;;
