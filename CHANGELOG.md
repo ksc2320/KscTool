@@ -5,6 +5,18 @@
 
 ---
 
+## dotfiles (.bash_functions)
+
+### [1.0.0] — 2026-07-14
+
+#### 변경 내용
+- `dv up` FW 파일 선택 목록이 최근 5개까지만 보이던 것을 15개로 확대 — 이전 버전으로 롤백할 때도 목록에서 바로 선택 가능
+
+#### Fixed / Changed
+- `_pick_file()` 내 `head -n 5`(fzf) / `head -n 3`(non-fzf select) → `head -n 15`로 통일
+
+---
+
 ## aptest (aptest.sh)
 
 ### [1.4.0] — 2026-07-13

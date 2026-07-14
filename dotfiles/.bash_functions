@@ -691,11 +691,11 @@ _pick_file() {
 	if [ $? -eq 0 ]; then
 		local query_opt=""
 		[ -n "$FW_PRIORITY_SEARCH" ] && query_opt="--query=$FW_PRIORITY_SEARCH"
-		result=$(ls -t | grep "\.${ext}$" | head -n 5 |
+		result=$(ls -t | grep "\.${ext}$" | head -n 15 |
 			fzf --cycle --height 10% --reverse --border \
 				--header "$header" $query_opt)
 	else
-		local FILE_LIST=($(ls -t | grep "\.${ext}$" | head -n 3) "Not Copy File")
+		local FILE_LIST=($(ls -t | grep "\.${ext}$" | head -n 15) "Not Copy File")
 		echo -e "${cYellow}${header}${cReset}"
 		select var in "${FILE_LIST[@]}"; do
 			result="$var"
