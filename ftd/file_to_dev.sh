@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.7.0'
+FTD_VERSION='2.8.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -932,6 +932,7 @@ _ftd_detect_serial() {
     fi
 
     local found_any=0
+    local -a viable=()
     for dev in "${candidates[@]}"; do
         [ -c "$dev" ] || continue
         found_any=1
@@ -955,7 +956,7 @@ except Exception:
 " 2>/dev/null)
         case "$rc" in
             OK)
-                serial_dev="$dev"; _SERIAL_SKIP_REASON=""; return 0 ;;
+                viable+=("$dev") ;;
             EPERM)
                 _SERIAL_SKIP_REASON="권한 없음 (${dev}) — sudo usermod -aG dialout \$USER 후 재로그인" ;;
             EBUSY)
@@ -964,10 +965,31 @@ except Exception:
                 _SERIAL_SKIP_REASON="열기 실패 (${dev})" ;;
         esac
     done
-    if [ $found_any -eq 0 ]; then
-        _SERIAL_SKIP_REASON="포트 없음 — USB 시리얼 어댑터 연결 확인"
+
+    if [ ${#viable[@]} -eq 0 ]; then
+        [ $found_any -eq 0 ] && _SERIAL_SKIP_REASON="포트 없음 — USB 시리얼 어댑터 연결 확인"
+        serial_dev=""
+        return
     fi
-    serial_dev=""
+
+    if [ ${#viable[@]} -eq 1 ]; then
+        serial_dev="${viable[0]}"; _SERIAL_SKIP_REASON=""
+        return 0
+    fi
+
+    # 시리얼 단말 여러 개 감지 — 기본값(Enter)=1번(보통 ttyUSB0), 번호로 다른 포트 선택 가능
+    echo -e "  ${_F_YELLOW}시리얼 포트 ${#viable[@]}개 감지됨${_F_RST}"
+    local i
+    for i in "${!viable[@]}"; do
+        echo -e "  ${_F_CYAN}$((i+1)))${_F_RST} ${viable[$i]}"
+    done
+    echo -ne "  선택 (Enter=1): "
+    local sel
+    read -r sel
+    [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#viable[@]}" ] || sel=1
+    serial_dev="${viable[$((sel-1))]}"
+    _SERIAL_SKIP_REASON=""
+    return 0
 }
 
 # ── SecureCRT 자동 붙여넣기 ──────────────────────────────────────────────
