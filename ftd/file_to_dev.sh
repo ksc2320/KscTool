@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.8.0'
+FTD_VERSION='2.9.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1013,27 +1013,44 @@ _ftd_find_crt_window() {
     else
         dev_hint="ttyusb"
     fi
-    local first_wid="" first_title=""
+
+    local -a wids=() titles=()
+    local matched_idx=-1
     while IFS= read -r wid; do
         local title; title=$(xdotool getwindowname "$wid" 2>/dev/null)
-        [ -z "$first_wid" ] && first_wid="$wid" && first_title="$title"
-        if echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
-            local resolved_wid="$wid"
-            # SecureCRT는 frame(parent)과 terminal widget(child)이 분리됨.
-            # type/clip 모두 child로 보내야 키 입력이 동작함.
-            local hex_child
-            hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
-                | awk '/^[[:space:]]+0x[0-9a-f]+.*".*SecureCRT"/ { print $1; exit }')
-            [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
-            _CRT_WINDOW_TITLE="$title"
-            echo "$resolved_wid"
-            return 0
+        wids+=("$wid"); titles+=("$title")
+        if [ "$matched_idx" -eq -1 ] && echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
+            matched_idx=$(( ${#wids[@]} - 1 ))
         fi
     done < <(xdotool search --name "SecureCRT" 2>/dev/null)
-    if [ -n "$first_wid" ]; then
-        _CRT_WINDOW_TITLE="$first_title"
-        echo "$first_wid"
+
+    [ "${#wids[@]}" -eq 0 ] && return 1
+
+    local pick_idx=0
+    if [ "${#wids[@]}" -gt 1 ]; then
+        # SecureCRT 창 여러 개 감지 — 기본값(Enter)=힌트 매칭 창(없으면 1번), 번호로 다른 창 선택 가능
+        local default_idx=$(( matched_idx >= 0 ? matched_idx + 1 : 1 ))
+        echo -e "  ${_F_YELLOW}SecureCRT 창 ${#wids[@]}개 감지됨${_F_RST}" >&2
+        local i
+        for i in "${!wids[@]}"; do
+            echo -e "  ${_F_CYAN}$((i+1)))${_F_RST} ${titles[$i]}" >&2
+        done
+        echo -ne "  선택 (Enter=${default_idx}): " >&2
+        local sel
+        read -r sel
+        [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#wids[@]}" ] || sel=$default_idx
+        pick_idx=$((sel-1))
     fi
+
+    local wid="${wids[$pick_idx]}" title="${titles[$pick_idx]}"
+    # SecureCRT는 frame(parent)과 terminal widget(child)이 분리됨.
+    # type/clip 모두 child로 보내야 키 입력이 동작함.
+    local resolved_wid="$wid" hex_child
+    hex_child=$(xwininfo -id "$wid" -children 2>/dev/null \
+        | awk '/^[[:space:]]+0x[0-9a-f]+.*".*SecureCRT"/ { print $1; exit }')
+    [ -n "$hex_child" ] && resolved_wid=$(printf '%d' "$hex_child")
+    _CRT_WINDOW_TITLE="$title"
+    echo "$resolved_wid"
 }
 
 _ftd_crt_key() {
