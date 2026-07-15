@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.9.0'
+FTD_VERSION='2.9.1'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1014,24 +1014,46 @@ _ftd_find_crt_window() {
         dev_hint="ttyusb"
     fi
 
+    # xdotool search 결과에는 세션 하나당 frame/wrapper/내부 terminal-widget이
+    # 겹쳐 잡힌다 — 제목 기준으로 중복 제거해야 실제 세션 개수만 남는다.
     local -a wids=() titles=()
-    local matched_idx=-1
+    local title t dup i
     while IFS= read -r wid; do
-        local title; title=$(xdotool getwindowname "$wid" 2>/dev/null)
+        title=$(xdotool getwindowname "$wid" 2>/dev/null)
+        [ -z "$title" ] && continue
+        dup=0
+        for t in "${titles[@]}"; do [ "$t" = "$title" ] && dup=1 && break; done
+        [ $dup -eq 1 ] && continue
         wids+=("$wid"); titles+=("$title")
-        if [ "$matched_idx" -eq -1 ] && echo "$title" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
-            matched_idx=$(( ${#wids[@]} - 1 ))
-        fi
     done < <(xdotool search --name "SecureCRT" 2>/dev/null)
 
     [ "${#wids[@]}" -eq 0 ] && return 1
+
+    # 이름 붙은 창("세션명 - SecureCRT")이 하나라도 있으면, 제목 없는 순수
+    # "SecureCRT" 내부 위젯은 별개 세션이 아니라 위젯 자체이므로 선택지에서 제외
+    local has_named=0
+    for t in "${titles[@]}"; do [ "$t" != "SecureCRT" ] && has_named=1 && break; done
+    if [ $has_named -eq 1 ]; then
+        local -a f_wids=() f_titles=()
+        for i in "${!titles[@]}"; do
+            [ "${titles[$i]}" = "SecureCRT" ] && continue
+            f_wids+=("${wids[$i]}"); f_titles+=("${titles[$i]}")
+        done
+        wids=("${f_wids[@]}"); titles=("${f_titles[@]}")
+    fi
+
+    local matched_idx=-1
+    for i in "${!titles[@]}"; do
+        if echo "${titles[$i]}" | tr '[:upper:]' '[:lower:]' | grep -q "$dev_hint"; then
+            matched_idx=$i; break
+        fi
+    done
 
     local pick_idx=0
     if [ "${#wids[@]}" -gt 1 ]; then
         # SecureCRT 창 여러 개 감지 — 기본값(Enter)=힌트 매칭 창(없으면 1번), 번호로 다른 창 선택 가능
         local default_idx=$(( matched_idx >= 0 ? matched_idx + 1 : 1 ))
         echo -e "  ${_F_YELLOW}SecureCRT 창 ${#wids[@]}개 감지됨${_F_RST}" >&2
-        local i
         for i in "${!wids[@]}"; do
             echo -e "  ${_F_CYAN}$((i+1)))${_F_RST} ${titles[$i]}" >&2
         done
