@@ -1197,10 +1197,29 @@ function update_package_version() {
 	echo -e ${cSky}"\n [ vim PlugInstall ] \n"${cReset}
 	vim -c ':PlugInstall | qa' -y
 
-#	echo -e ${cSky}"\n [ gemini-cli update ] \n"${cReset}
-#	npm install -g @google/gemini-cli
+	davo_ai_cli_update
 
 	echo -e "\n${DONE} Package Update Done\n"
+}
+
+function davo_ai_cli_update() {
+	echo -e "\n${RUN} AI CLI Update"
+
+	# claude / codex: 네이티브 설치본 self-update (npm 아님)
+	for _tool in claude codex; do
+		if command -v "$_tool" &>/dev/null; then
+			echo -e ${cSky}"\n [ $_tool update ] \n"${cReset}
+			"$_tool" update
+		fi
+	done
+
+	# gemini-cli: npm 설치본이 있을 때만
+	if command -v gemini &>/dev/null; then
+		echo -e ${cSky}"\n [ gemini-cli update ] \n"${cReset}
+		npm install -g @google/gemini-cli
+	fi
+
+	echo -e "${DONE} AI CLI Update Done"
 }
 
 function davo_macro_ap_connect() {
@@ -2226,6 +2245,9 @@ function davo_macro_tool() {
 		upp | update_package)
 			update_package_version
 			;;
+		aiup | ai_update)
+			davo_ai_cli_update
+			;;
 		ver | version | verison)
 			version_info
 			;;
@@ -2794,6 +2816,7 @@ fi
 # ================================================================= #
 #                    KscTool 미설치 안내 (fallback)                  #
 # ================================================================= #
+
 # @desc 커맨드 목록 조회 — dvhelp [키워드]
 function dvhelp() {
     local script="$HOME/KscTool/tools/dvhelp.sh"
@@ -2818,14 +2841,14 @@ _ksc_setup_hint() {
 }
 
 if [[ ! -d "$HOME/KscTool" ]]; then
-    # source로 로드되는 함수들 fallback
     function _ftd_main()   { _ksc_setup_hint "fwd (ftd)"; }
     function _cpbak_main() { _ksc_setup_hint "cpbak"; }
 
-    # 직접 경로 alias들 fallback (bash_aliases보다 나중에 로드되므로 override 됨)
     for _ksc_cmd in scs obs ucisnap spec genindex genindex-tags genindex-bear; do
-        # shellcheck disable=SC2139
         alias "$_ksc_cmd"="_ksc_setup_hint $_ksc_cmd"
     done
     unset _ksc_cmd
 fi
+
+# aptest — AP 실기 디버그 테스트 하네스
+[ -f "/home/ksc/KscTool/aptest/aptest.sh" ] && source "/home/ksc/KscTool/aptest/aptest.sh"
