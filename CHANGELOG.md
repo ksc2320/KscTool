@@ -179,6 +179,21 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.10.0] — 2026-07-22
+
+#### 변경 내용
+- `dv up <파일명>` 으로 배포할 FW를 직접 지정 가능 — 선택 목록/자동선택을 건너뛰고 그 파일로 바로 배포
+- `.zip` 파일은 DVF-754 방식(`davo_upgrade`)으로 자동 전환 — `.img` 는 기존대로 `sysupgrade`
+
+#### 사용법
+- `dv up fw.img` — 경로/파일명 직접 지정 (없는 이름이면 scan 경로에서 찾음)
+- `dv up DVF-754X_..._r243.zip` — wget 으로 AP에 받은 뒤 `davo_upgrade /tmp/<파일>` 로 업데이트
+
+#### Fixed / Changed
+- `_ftd_up`: 인자 파싱에 `*.img|*.zip|*/*` → `fw_override` 추가, 지정 시 모드(dv/path/scan) 무시하고 해당 파일 복사
+- `_ftd_transfer`: 파일 확장자로 upgrade 명령 분기(`sysupgrade`/`davo_upgrade`), 확인·dry-run 메시지도 실제 명령을 표시
+- `_ftd_upgrade_confirm`/`_ftd_print_dry` 시그니처를 명령 문자열 기반으로 변경
+
 ### [2.9.1] — 2026-07-15
 
 #### Fixed

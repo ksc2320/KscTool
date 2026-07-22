@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.9.1'
+FTD_VERSION='2.10.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -527,7 +527,7 @@ _ftd_howtoplay() {
 # ══════════════════════════════════════════════════════════════════════════
 _ftd_up() {
     _ftd_load_conf
-    local do_select=0 dry=0 upgrade_n=0 ap_ip_override=""
+    local do_select=0 dry=0 upgrade_n=0 ap_ip_override="" fw_override=""
 
     case "${1:-}" in
         s|select) do_select=1; shift ;;
@@ -542,8 +542,10 @@ _ftd_up() {
     # 나머지 플래그 수집
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            -n)         upgrade_n=1 ;;
-            [0-9]*.*)   ap_ip_override="$1" ;;
+            -n)              upgrade_n=1 ;;
+            *.img|*.zip|*/*) fw_override="$1" ;;
+            [0-9]*.*)        ap_ip_override="$1" ;;
+            *)               [ -e "$1" ] && fw_override="$1" ;;
         esac
         shift
     done
@@ -554,6 +556,17 @@ _ftd_up() {
 
     local fw_copied_name=""
 
+    if [ -n "$fw_override" ]; then
+        # 파일명/경로 직접 지정 → 모드 무시하고 해당 파일로 배포
+        local ov_src="$fw_override"
+        [ -f "$ov_src" ] || ov_src=$(_ftd_scan_fw_files | awk '{print $NF}' | grep -F "$fw_override" | head -1)
+        if [ -z "$ov_src" ] || [ ! -f "$ov_src" ]; then
+            echo -e "${_FAIL} 파일 없음: ${_F_YELLOW}${fw_override}${_F_RST}"
+            echo -e "${_F_DIM}   경로를 주거나 scan 경로(${FTD_SCAN_DIRS}) 안의 이름으로 지정${_F_RST}"
+            return 1
+        fi
+        fw_copied_name=$(_ftd_do_copy "$ov_src" "${FTD_TFTP_PATH}") || return 1
+    else
     case "$FTD_FW_MODE" in
         dv)
             if declare -f send_file_to_tftp &>/dev/null; then
@@ -604,6 +617,7 @@ _ftd_up() {
             fw_copied_name=$(_ftd_do_copy "$src_file" "${FTD_TFTP_PATH}") || return 1
             ;;
     esac
+    fi
 
     echo -e "${_OK} ${_F_GREEN}${fw_copied_name}${_F_RST} 복사 완료"
 
@@ -757,6 +771,18 @@ _ftd_transfer() {
     [ $upgrade_n -eq 1 ] && sysupgrade_opts="${sysupgrade_opts} -n"
     sysupgrade_opts="${sysupgrade_opts# }"
 
+    # 명령 구성 — .zip 은 DVF-754 davo_upgrade, 그 외는 sysupgrade
+    local wget_url="http://${server_ip}:${http_port}/${file_name}"
+    local cmd_wget="cd /tmp && wget ${wget_url} -O ${file_name}"
+    local cmd_upgrade upgrade_name upg_opts
+    if [[ "$file_name" == *.zip ]]; then
+        cmd_upgrade="davo_upgrade /tmp/${file_name}"
+        upgrade_name="davo_upgrade"; upg_opts=""
+    else
+        cmd_upgrade="sysupgrade ${sysupgrade_opts} /tmp/${file_name}"
+        upgrade_name="sysupgrade"; upg_opts="$sysupgrade_opts"
+    fi
+
     # CRT 창 감지 우선, 없으면 시리얼 감지
     local crt_wid="" serial_dev=""
     crt_wid=$(_ftd_find_crt_window)
@@ -772,7 +798,7 @@ _ftd_transfer() {
 
     # dry-run
     if [ $dry -eq 1 ]; then
-        _ftd_print_dry "$file_name" "$server_ip" "$http_port" $do_upgrade "$sysupgrade_opts"
+        _ftd_print_dry "$cmd_wget" $do_upgrade "$cmd_upgrade"
         return 0
     fi
 
@@ -786,11 +812,6 @@ _ftd_transfer() {
     _ftd_check_http "$server_ip" "$http_port" "$file_name" || return 1
     echo ""
 
-    # 명령 구성
-    local wget_url="http://${server_ip}:${http_port}/${file_name}"
-    local cmd_wget="cd /tmp && wget ${wget_url} -O ${file_name}"
-    local cmd_upgrade="sysupgrade ${sysupgrade_opts} /tmp/${file_name}"
-
     echo -e "${_RUN} ${_F_BOLD}[3/3]${_F_RST} AP 전송..."
 
     if [ -n "$crt_wid" ]; then
@@ -803,7 +824,7 @@ _ftd_transfer() {
 
         if [ $do_upgrade -eq 1 ]; then
             echo -ne "  wget 완료 후 Enter... "; read -r
-            _ftd_upgrade_confirm "$sysupgrade_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
+            _ftd_upgrade_confirm "$upgrade_name" "$upg_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
             _ftd_crt_paste "$cmd_upgrade" "$crt_wid"
             [ -n "$my_wid" ] && xdotool windowfocus "$my_wid" 2>/dev/null
             _ftd_log "OK" "$file_name" "$ap_ip"
@@ -824,8 +845,8 @@ _ftd_transfer() {
         fi
 
         if [ $do_upgrade -eq 1 ]; then
-            _ftd_upgrade_confirm "$sysupgrade_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
-            echo -e "${_RUN} sysupgrade 전송..."
+            _ftd_upgrade_confirm "$upgrade_name" "$upg_opts" || { _banner warn "다운로드만 완료 — upgrade 취소"; _ftd_log "CLIP" "$file_name" "$ap_ip"; return 0; }
+            echo -e "${_RUN} ${upgrade_name} 전송..."
             _ftd_serial_cmd "$serial_dev" "$cmd_upgrade" 2
             _ftd_log "OK" "$file_name" "$ap_ip"
             _ftd_wait_boot "$ap_ip"
@@ -849,7 +870,7 @@ _ftd_transfer() {
         if [ $do_upgrade -eq 1 ]; then
             echo ""; echo -ne "   wget 완료 후 Enter... "; read -r
             echo ""
-            echo -e "${_F_WHITE}  ┌─ sysupgrade${_F_RST}"
+            echo -e "${_F_WHITE}  ┌─ ${upgrade_name}${_F_RST}"
             echo -e "${_F_RED}  │ ${cmd_upgrade}${_F_RST}"
             echo -e "${_F_WHITE}  └─────────────${_F_RST}"
             _ftd_clip_write "$cmd_upgrade" \
@@ -907,14 +928,13 @@ _ftd_print_header() {
 }
 
 _ftd_print_dry() {
-    local file="$1" host="$2" port="$3" do_upg="$4" opts="$5"
-    local url="http://${host}:${port}/${file}"
+    local cmd_wget="$1" do_upg="$2" cmd_upgrade="$3"
     echo -e "${_F_MAG}[DRY-RUN] 실행될 명령 미리보기${_F_RST}"
     echo ""
     [ "$FTD_AUTO_LOGIN" = "on" ] && echo -e "  ${_F_DIM}① 로그인: ${FTD_LOGIN_USER}${_F_RST}"
-    echo -e "  ${_F_SKY}② wget${_F_RST}   : cd /tmp && wget ${url} -O ${file}"
+    echo -e "  ${_F_SKY}② wget${_F_RST}   : ${cmd_wget}"
     [ "$do_upg" = "1" ] && \
-        echo -e "  ${_F_SKY}③ upgrade${_F_RST}: sysupgrade ${opts} /tmp/${file}"
+        echo -e "  ${_F_SKY}③ upgrade${_F_RST}: ${cmd_upgrade}"
     echo ""
 }
 
@@ -994,12 +1014,12 @@ except Exception:
 
 # ── SecureCRT 자동 붙여넣기 ──────────────────────────────────────────────
 _ftd_upgrade_confirm() {
-    local opts="${1:-}"
+    local cmd_name="${1:-sysupgrade}" opts="${2:-}"
     echo ""
     echo -e "${_F_CYAN}  ╔════════════════════════════════════════╗${_F_RST}"
-    echo -e "${_F_CYAN}  ║  ▶  AP가 재부팅됩니다 — sysupgrade   ║${_F_RST}"
+    echo -e "${_F_CYAN}  ║  ▶  AP가 재부팅됩니다 — ${_F_WHITE}${cmd_name}${_F_RST}"
     [ -n "$opts" ] && \
-    echo -e "${_F_CYAN}  ║     옵션: ${_F_WHITE}${opts}${_F_CYAN}                      ║${_F_RST}"
+    echo -e "${_F_CYAN}  ║     옵션: ${_F_WHITE}${opts}${_F_RST}"
     echo -e "${_F_CYAN}  ╚════════════════════════════════════════╝${_F_RST}"
     echo -ne "  진행? [y/N]: "; read -r confirm
     [[ "$confirm" =~ ^[yY]$ ]]
@@ -1421,6 +1441,7 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "init"        "초기 설치 마법사 (최초 1회, 재실행 가능)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up"          "FW 자동 선택 → 전체 배포"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up s"        "fzf로 FW 파일 직접 선택 후 배포"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up <name>"   "파일명/경로 직접 지정 후 배포 (ex: up fw.img)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up -n"       "sysupgrade -n (설정 초기화 포함)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up dry"      "dry-run (명령 미리보기만)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "up [AP_IP]"  "AP IP 직접 지정 (ex: up 192.168.1.254)"
