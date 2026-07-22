@@ -7,6 +7,20 @@
 
 ## dotfiles (.bash_functions)
 
+### [1.1.0] — 2026-07-22
+
+#### 변경 내용
+- `dv td` 명령 추가 — JIRA에 나에게 할당된 미완료 이슈를 `~/memo/todo.md`의 `# TODO`에 자동 등록. 주중 09:00·13:15 cron으로도 자동 실행됨
+
+#### 사용법
+- `dv td` (별칭 `dv jr` / `dv jira` / `dv todo`) — 지금 바로 JIRA 내 업무를 todo.md에 갱신
+- 안 할/묵힐 이슈는 todo.md `# 보류` 섹션으로 옮기면 재등록 안 됨
+
+#### Fixed / Changed
+- `davo_macro_tool` case에 `jr | jira | td | todo)` 추가, help(`dv help`)에 항목 추가
+- 조회 스크립트 본체: `~/memo/.jira_todo.py` (외부 의존성 0, urllib). 자격증명은 `~/memo/.env`
+- JQL에서 `SESUPPORT`(support) 프로젝트 제외 — 스크립트 상단 `EXCLUDE_PROJECTS` 로 조정
+
 ### [1.0.0] — 2026-07-14
 
 #### 변경 내용

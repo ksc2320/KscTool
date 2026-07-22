@@ -932,6 +932,7 @@ function davo_macro_help() {
 
 	echo -e "\n== [ HELP ] =================================================================\n"
 	echo -e " * ${cSky}dv ap${cReset}		: Sudo chown Owner:Owner /dev/ttyUSB0"
+	echo -e " * ${cSky}dv td${cReset}		: JIRA 내 업무 → ~/memo/todo.md 갱신 (jr/todo 동일)"
 	echo -e " * ${cSky}mk setg${cReset} 	: Change & Adjust project"
 	echo -e " * ${cSky}mk option${cReset} 	: Setting mk Tool option"
 	echo -e "\n ---------------------------------------------------------------------------\n"
@@ -2275,6 +2276,9 @@ function davo_macro_tool() {
 			#				code #vscode
 			davo_macro_ap_connect
 			show_info
+			;;
+		jr | jira | td | todo)
+			python3 ~/memo/.jira_todo.py
 			;;
 		size)
 			cd ${CUR_DIR}
