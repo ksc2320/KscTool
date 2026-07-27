@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.10.0'
+FTD_VERSION='2.11.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -95,20 +95,49 @@ _ftd_load_conf() {
 _ftd_load_conf
 
 # ── 네트워크 자동 감지 ────────────────────────────────────────────────────
+# AP 마지막 옥텟 — DVF-754는 .1, 나머지 DAVO 기종은 .254.
+# NOW_PROJECT(dv set)는 최신화가 보장되지 않아 판단 근거로 쓰지 않는다.
+# 대신 배포할 FW 종류로 가른다 — 754는 .zip(davo_upgrade), 그 외는 .img(sysupgrade).
+# 이미 _ftd_deploy 의 upgrade 명령 분기가 쓰는 것과 같은 기준이라 어긋날 일이 없다.
+_ftd_ap_octet_for_fw() { case "${1:-}" in *.zip) echo 1 ;; *) echo 254 ;; esac; }
+
+# IPv4 주소를 가진 enx 인터페이스 목록 — "인터페이스명 호스트IP" 한 줄씩
+# (USB 랜카드 여러 개일 때 IP 없는 첫 enx를 잘못 고르던 문제 때문에 / inet / 필터)
+_ftd_enx_list() {
+    ip -4 -o addr show 2>/dev/null |
+        awk '/enx[a-f0-9]+/ && / inet /{split($4,a,"/"); print $2, a[1]}'
+}
+
+# 후보 옥텟을 우선순위대로 받아 ping 응답하는 (인터페이스, 호스트IP, AP IP) 한 짝을 확정.
+# 754와 그 외 AP를 동시에 꽂아둘 수 있으므로 서브넷을 짝지어야 한다 —
+# HTTP 서버 IP(_DETECTED_HOST_IP)가 AP와 다른 서브넷이면 AP가 wget 을 못 받는다.
+# 인자 없으면 254 → 1 순서로 탐색 (cmd/ssh/reboot 등 FW 없는 명령용).
+# ponytail: AP가 다 죽어있으면 (옥텟 수 × enx 장수) 만큼 ping 이 타임아웃 —
+#           보통 0.03s, 최악 4s. 체감되면 ping -W 를 0.3 으로 줄이거나 결과를 캐시.
 _ftd_detect_network() {
-    local enx_line
-    # IPv4 주소를 실제로 가진 enx 인터페이스를 선택 → 이름과 IP 항상 일치
-    # (USB 랜카드 여러 개일 때 IP 없는 첫 enx를 잘못 고르던 문제 수정)
-    enx_line=$(ip -4 -o addr show 2>/dev/null | awk '/enx[a-f0-9]+/ && / inet /{print $2, $4; exit}')
-    if [ -n "$enx_line" ]; then
-        _DETECTED_ENX_IF=$(echo "$enx_line" | awk '{print $1}')
-        _DETECTED_HOST_IP=$(echo "$enx_line" | awk '{print $2}' | cut -d/ -f1)
-        _DETECTED_AP_IP=$(echo "$_DETECTED_HOST_IP" | sed 's/\.[0-9]*$/.254/')
+    local octets="${*:-254 1}" oct if_name host ap
+    local fb_if="" fb_host="" fb_ap=""
+
+    _DETECTED_ENX_IF=""; _DETECTED_HOST_IP=""; _DETECTED_AP_IP=""
+
+    for oct in $octets; do
+        while read -r if_name host; do
+            [ -z "$if_name" ] && continue
+            ap="${host%.*}.${oct}"
+            # 첫 후보는 ping 이 다 죽었을 때 쓸 폴백 (기존 '첫 enx' 동작 유지)
+            [ -z "$fb_if" ] && { fb_if="$if_name"; fb_host="$host"; fb_ap="$ap"; }
+            if ping -c1 -W1 "$ap" &>/dev/null; then
+                _DETECTED_ENX_IF="$if_name"; _DETECTED_HOST_IP="$host"; _DETECTED_AP_IP="$ap"
+                return 0
+            fi
+        done < <(_ftd_enx_list)
+    done
+
+    if [ -n "$fb_if" ]; then
+        _DETECTED_ENX_IF="$fb_if"; _DETECTED_HOST_IP="$fb_host"; _DETECTED_AP_IP="$fb_ap"
     else
         # IP 없으면 링크에 존재하는 첫 enx 이름만 표시 (IP 미검출)
         _DETECTED_ENX_IF=$(ip link show 2>/dev/null | grep -oE 'enx[a-f0-9]+' | head -1)
-        _DETECTED_HOST_IP=""
-        _DETECTED_AP_IP=""
     fi
 }
 _ftd_detect_network
@@ -369,7 +398,7 @@ FTD_SERVER_IP='${new_server_ip}'
 # HTTP 포트
 FTD_HTTP_PORT='${new_http_port}'
 
-# AP IP — auto = enx 기반 .254 자동 감지
+# AP IP — auto = enx 서브넷 + ping 자동 감지 (.254 / DVF-754(.zip FW)는 .1)
 FTD_AP_IP='auto'
 
 # 시리얼: auto / /dev/ttyUSBx / off
@@ -763,7 +792,16 @@ _ftd_transfer() {
     local fw_path="${FTD_TFTP_PATH}/${file_name}"
     [ ! -f "$fw_path" ] && echo -e "${_FAIL} 파일 없음: ${fw_path}" && return 1
 
-    # 값 결정
+    # 값 결정 — AP를 먼저 확정하고 HTTP 서버 IP를 같은 서브넷 enx 로 맞춘다.
+    # (서로 다른 서브넷이면 AP가 wget 을 못 받는다)
+    if [ -n "$ap_ip_ovr" ]; then
+        local ovr_host
+        ovr_host=$(_ftd_enx_list | awk -v s="${ap_ip_ovr%.*}." 'index($2,s)==1{print $2; exit}')
+        [ -n "$ovr_host" ] && _DETECTED_HOST_IP="$ovr_host"
+    else
+        # 배포할 FW 종류로 옥텟을 하나로 고정 → 다른 기종 AP에 잘못 flash 되는 일 방지
+        _ftd_detect_network "$(_ftd_ap_octet_for_fw "$file_name")"
+    fi
     local server_ip; server_ip=$(_ftd_server_ip)
     local ap_ip; ap_ip="${ap_ip_ovr:-$(_ftd_ap_ip)}"
     local http_port="$FTD_HTTP_PORT"
@@ -1276,7 +1314,7 @@ _ftd_set() {
         "FTD_TFTP_PATH|TFTP/HTTP 루트 경로"
         "FTD_SERVER_IP|호스트 IP (auto=enx 감지)"
         "FTD_HTTP_PORT|HTTP 포트"
-        "FTD_AP_IP|AP IP (auto=.254 감지)"
+        "FTD_AP_IP|AP IP (auto=ping 감지: .254 / 754(.zip)는 .1)"
         "FTD_SERIAL_DEV|시리얼 디바이스 (auto/off//dev/ttyUSBx)"
         "FTD_AUTO_LOGIN|자동 로그인 (on/off)"
         "FTD_LOGIN_USER|로그인 유저"

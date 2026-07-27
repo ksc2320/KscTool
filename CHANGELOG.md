@@ -179,6 +179,24 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.11.0] — 2026-07-27
+
+#### 변경 내용
+- `dv up` 이 AP IP를 배포할 FW 종류로 알아서 가른다 — DVF-754(`.zip`)는 `192.168.1.1`, 그 외 기종(`.img`)은 해당 서브넷의 `.254`. 754와 다른 기종 AP를 동시에 꽂아둬도 맞는 쪽으로 간다
+- USB 랜카드가 2장 이상일 때 AP와 HTTP 서버 IP가 서로 다른 서브넷으로 잡혀 AP가 `wget` 을 못 받던 문제 해결 — 이제 한 짝으로 고른다
+
+#### 사용법
+- `dv up` — FW가 `.zip`이면 754 AP(`.1`), `.img`면 `.254`로 자동. `dv set` 프로젝트명과 무관
+- `dv up 192.168.1.x` — 직접 지정도 그대로. 이때 HTTP 서버 IP도 같은 서브넷 enx로 맞춰짐
+- 고정하고 싶으면 `fwd set` 에서 `FTD_AP_IP` 를 IP로 지정 (auto 해제)
+
+#### Fixed / Changed
+- `_ftd_ap_octet_for_fw()` 추가 — `.zip`=1 / 그 외=254. `_ftd_deploy` 의 `davo_upgrade`/`sysupgrade` 분기와 같은 기준이라 어긋나지 않음
+- `_ftd_enx_list()` 추가, `_ftd_detect_network()` 가 후보 옥텟을 인자로 받아 ping 응답하는 (enx, 호스트IP, AP IP) 한 짝을 확정. 인자 없으면 `254 → 1` 순서 (cmd/ssh/reboot 용)
+- 판단 근거로 `NOW_PROJECT`(`dv set`)를 쓰지 않음 — 최신화가 보장되지 않아 잘못된 기종으로 flash 될 위험이 있음
+- `up` 은 옥텟을 하나로 고정해 탐색 (다른 기종 AP로 넘어가지 않게), 전부 무응답이면 첫 enx 기준 폴백 (기존 동작 유지)
+- 검증: `_ftd_detect_network` 자체 테스트 — ping/enx 스텁으로 6케이스 (754 단독·혼재·FW 없음·전부 무응답) 통과
+
 ### [2.10.0] — 2026-07-22
 
 #### 변경 내용
