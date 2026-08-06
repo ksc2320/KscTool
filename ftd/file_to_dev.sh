@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.11.0'
+FTD_VERSION='2.12.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -1063,6 +1063,60 @@ _ftd_upgrade_confirm() {
     [[ "$confirm" =~ ^[yY]$ ]]
 }
 
+# SecureCRT 창 목록 — "wid<TAB>제목" 한 줄씩.
+# xdotool search 결과에는 세션 하나당 frame/wrapper/내부 terminal-widget이
+# 겹쳐 잡힌다 — 제목 기준으로 중복 제거해야 실제 세션 개수만 남는다.
+# 이름 붙은 창("세션명 - SecureCRT")이 하나라도 있으면, 제목 없는 순수
+# "SecureCRT" 내부 위젯은 별개 세션이 아니라 위젯 자체이므로 제외.
+_ftd_crt_list() {
+    command -v xdotool &>/dev/null || return 1
+    local -a wids=() titles=()
+    local wid title t dup i
+    while IFS= read -r wid; do
+        title=$(xdotool getwindowname "$wid" 2>/dev/null)
+        [ -z "$title" ] && continue
+        dup=0
+        for t in "${titles[@]}"; do [ "$t" = "$title" ] && dup=1 && break; done
+        [ $dup -eq 1 ] && continue
+        wids+=("$wid"); titles+=("$title")
+    done < <(xdotool search --name "SecureCRT" 2>/dev/null)
+    [ "${#wids[@]}" -eq 0 ] && return 1
+
+    local has_named=0
+    for t in "${titles[@]}"; do [ "$t" != "SecureCRT" ] && has_named=1 && break; done
+    for i in "${!titles[@]}"; do
+        [ $has_named -eq 1 ] && [ "${titles[$i]}" = "SecureCRT" ] && continue
+        printf '%s\t%s\n' "${wids[$i]}" "${titles[$i]}"
+    done
+}
+
+# 창 제목(ttyUSB 번호)만으로는 어느 제품인지 모른다. SecureCRT 세션 로그
+# 끝부분의 셸 프롬프트(root@DV03-609H)나 로그인 배너에서 호스트명을 뽑는다.
+_ftd_crt_host() {
+    local title="${1% - SecureCRT}" log host
+    log=$(ls -t "${FTD_CRT_LOG_DIR:-/hdd/ksc/securecrt_log}/serial-${title}"_*.log 2>/dev/null | head -1)
+    [ -z "$log" ] && { echo "?"; return; }
+    host=$(tail -c 200000 "$log" \
+        | grep -aoE 'root@[A-Za-z0-9._-]+|[A-Za-z0-9._-]+ login:' | tail -1)
+    host="${host#root@}"; host="${host% login:}"
+    echo "${host:-?}"
+}
+
+# 어느 창이 어느 장비인지 — 시험 전 대상 확정용
+_ftd_crt_who() {
+    local wid title n=0
+    echo ""
+    _hd "🖥  SecureCRT 창 ↔ 장비"
+    while IFS=$'\t' read -r wid title; do
+        n=$((n+1))
+        printf "  ${_F_CYAN}%d)${_F_RST} %-28s ${_F_YELLOW}%s${_F_RST}\n" \
+            "$n" "$title" "$(_ftd_crt_host "$title")"
+    done < <(_ftd_crt_list)
+    echo ""
+    [ $n -eq 0 ] && { echo -e "${_WARN} SecureCRT 창 없음"; return 1; }
+    return 0
+}
+
 _ftd_find_crt_window() {
     command -v xdotool &>/dev/null || return 1
     local dev_hint
@@ -1072,33 +1126,13 @@ _ftd_find_crt_window() {
         dev_hint="ttyusb"
     fi
 
-    # xdotool search 결과에는 세션 하나당 frame/wrapper/내부 terminal-widget이
-    # 겹쳐 잡힌다 — 제목 기준으로 중복 제거해야 실제 세션 개수만 남는다.
     local -a wids=() titles=()
-    local title t dup i
-    while IFS= read -r wid; do
-        title=$(xdotool getwindowname "$wid" 2>/dev/null)
-        [ -z "$title" ] && continue
-        dup=0
-        for t in "${titles[@]}"; do [ "$t" = "$title" ] && dup=1 && break; done
-        [ $dup -eq 1 ] && continue
+    local wid title i
+    while IFS=$'\t' read -r wid title; do
         wids+=("$wid"); titles+=("$title")
-    done < <(xdotool search --name "SecureCRT" 2>/dev/null)
+    done < <(_ftd_crt_list)
 
     [ "${#wids[@]}" -eq 0 ] && return 1
-
-    # 이름 붙은 창("세션명 - SecureCRT")이 하나라도 있으면, 제목 없는 순수
-    # "SecureCRT" 내부 위젯은 별개 세션이 아니라 위젯 자체이므로 선택지에서 제외
-    local has_named=0
-    for t in "${titles[@]}"; do [ "$t" != "SecureCRT" ] && has_named=1 && break; done
-    if [ $has_named -eq 1 ]; then
-        local -a f_wids=() f_titles=()
-        for i in "${!titles[@]}"; do
-            [ "${titles[$i]}" = "SecureCRT" ] && continue
-            f_wids+=("${wids[$i]}"); f_titles+=("${titles[$i]}")
-        done
-        wids=("${f_wids[@]}"); titles=("${f_titles[@]}")
-    fi
 
     local matched_idx=-1
     for i in "${!titles[@]}"; do
@@ -1109,20 +1143,36 @@ _ftd_find_crt_window() {
 
     local pick_idx=0
     if [ "${#wids[@]}" -gt 1 ]; then
-        # SecureCRT 창 여러 개 감지 — 기본값(Enter)=힌트 매칭 창(없으면 1번), 번호로 다른 창 선택 가능
+        # 창 제목은 ttyUSB 번호뿐이라 제품을 구분 못 한다 — 호스트명을 같이 보여준다
+        local -a hosts=(); local h ambiguous=0
+        for i in "${!wids[@]}"; do hosts+=("$(_ftd_crt_host "${titles[$i]}")"); done
+        for h in "${hosts[@]}"; do [ "$h" != "${hosts[0]}" ] && ambiguous=1 && break; done
+
         local default_idx=$(( matched_idx >= 0 ? matched_idx + 1 : 1 ))
         echo -e "  ${_F_YELLOW}SecureCRT 창 ${#wids[@]}개 감지됨${_F_RST}" >&2
         for i in "${!wids[@]}"; do
-            echo -e "  ${_F_CYAN}$((i+1)))${_F_RST} ${titles[$i]}" >&2
+            printf "  ${_F_CYAN}%d)${_F_RST} %-28s ${_F_YELLOW}%s${_F_RST}\n" \
+                "$((i+1))" "${titles[$i]}" "${hosts[$i]}" >&2
         done
-        echo -ne "  선택 (Enter=${default_idx}): " >&2
+
         local sel
-        read -r sel
-        [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#wids[@]}" ] || sel=$default_idx
+        if [ $ambiguous -eq 1 ]; then
+            # 붙어 있는 장비가 서로 다르면 넘겨짚지 않는다 — 엉뚱한 AP에 명령이 들어간 사고가 있었다
+            echo -ne "  ${_F_RED}장비가 서로 다름 — 번호 입력 (기본값 없음): ${_F_RST}" >&2
+            read -r sel
+            if ! [[ "$sel" =~ ^[0-9]+$ ]] || [ "$sel" -lt 1 ] || [ "$sel" -gt "${#wids[@]}" ]; then
+                echo -e "\n${_WARN} 대상 미지정 — 중단 (${_F_CYAN}fwd who${_F_RST}로 확인 후 다시)" >&2
+                return 1
+            fi
+        else
+            echo -ne "  선택 (Enter=${default_idx}): " >&2
+            read -r sel
+            [[ "$sel" =~ ^[0-9]+$ ]] && [ "$sel" -ge 1 ] && [ "$sel" -le "${#wids[@]}" ] || sel=$default_idx
+        fi
         pick_idx=$((sel-1))
     fi
 
-    local wid="${wids[$pick_idx]}" title="${titles[$pick_idx]}"
+    wid="${wids[$pick_idx]}"; title="${titles[$pick_idx]}"
     # SecureCRT는 frame(parent)과 terminal widget(child)이 분리됨.
     # type/clip 모두 child로 보내야 키 입력이 동작함.
     local resolved_wid="$wid" hex_child
@@ -1501,6 +1551,7 @@ _ftd_help() {
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "smoke [--live]" "AP smoke 테스트 (기본 dry-run. aptest 위임)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "reboot"     "AP 재부팅 (reboot 명령 전송 + 부팅 대기)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "clean"      "tftpboot 파일 정리 (fzf 다중 선택 삭제)"
+    printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "who"        "SecureCRT 창별 접속 장비 확인 (시험 전 대상 확정)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "set"        "설정 편집 (IP·포트·시리얼 등)"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "log"        "배포 이력 조회"
     printf "  ${_F_CYAN}%-20s${_F_RST} %s\n" "doctor"     "환경 진단 (패키지·설정·서버)"
@@ -2132,6 +2183,7 @@ _ftd_main() {
         clean)        _ftd_clean ;;
         ssh)          _ftd_aptest ssh "${@:2}" ;;
         smoke)        _ftd_aptest smoke "${@:2}" ;;
+        who)          _ftd_crt_who ;;
         set)          _ftd_set ;;
         log)          _ftd_log_show ;;
         doctor)       _ftd_doctor ;;

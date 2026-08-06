@@ -179,6 +179,25 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.12.0] — 2026-08-06
+
+#### 변경 내용
+- SecureCRT 창을 고를 때 **어느 장비에 붙어 있는지(호스트명)** 를 같이 보여준다 — 창 제목은 `ttyUSB0/2` 뿐이라 제품 구분이 안 됐다
+- 창마다 다른 장비가 붙어 있으면 **기본값(Enter) 없이 번호를 요구**한다. 미입력이면 전송하지 않고 중단 — 엉뚱한 AP에 명령이 들어가는 사고 방지
+
+#### 사용법
+- `fwd who` — 창별 접속 장비 확인. 시험/명령 전송 전에 대상 확정용
+  ```
+  1) Serial-ttyUSB2 - SecureCRT   smartair
+  2) serial-ttyusb0 - SecureCRT   DV03-609H
+  ```
+- `fwdc` / `fwdg` / `fwd dbg` 등 CRT 경유 명령의 창 선택 목록에도 호스트명이 함께 뜬다
+
+#### Fixed / Changed
+- `_ftd_crt_list()` 분리 — 창 열거·중복 제거 로직을 `_ftd_find_crt_window()`와 `fwd who`가 공유
+- `_ftd_crt_host()` 추가 — SecureCRT 세션 로그(`$FTD_CRT_LOG_DIR`, 기본 `/hdd/ksc/securecrt_log`) 끝부분의 `root@호스트` 프롬프트 또는 로그인 배너에서 장비명 추출
+- 기존 기본값은 `FTD_SERIAL_DEV` 힌트(`ttyusb`) 첫 매칭이라 ttyUSB2가 먼저 걸렸다 — 장비가 섞여 있으면 이 기본값을 쓰지 않는다
+
 ### [2.11.0] — 2026-07-27
 
 #### 변경 내용
