@@ -30,7 +30,9 @@ MS_PER_CHAR = 10.0 / 115200 * 1000  # 8N1 = 10비트/문자
 # 닫는 괄호를 요구하지 않는다. 전원 붕괴 순간 "[ 810.864105" 뒤가 깨져도
 # 시각은 살아 있으므로 회차 기준시각을 살릴 수 있다.
 # 부트로더의 "[3720]" 같은 정수 표기는 \d+\.\d+ 에 걸리지 않아 오탐이 없다.
+# 마커·시각 인식은 관대하게. 전원 붕괴로 줄이 깨져도 회차를 놓치지 않는다.
 TS = re.compile(r"^\[\s*(\d+\.\d+)")
+CLEAN = re.compile(r"^\[\s*(\d+\.\d+)\]\[\s*[CT]?\d+\]")  # 노이즈 배제용
 DG2 = re.compile(r"DG2\|([A-Z]{2})\|")
 DG2T = re.compile(r"DG2T\|(\S+)")
 # 전원 붕괴로 깨진 마커의 꼬리. 형식이 DG2|XX|cN|tNNN 이라 끝은 살아남곤 한다.
@@ -147,7 +149,9 @@ def parse(paths):
                 continue
 
             if up is not None:
-                cur["last_up"] = max(cur["last_up"], up)
+                # 생존시간은 깨끗한 커널 줄에서만 갱신 (노이즈 배제)
+                if CLEAN.match(line):
+                    cur["last_up"] = max(cur["last_up"], up)
                 if tag == "??":
                     cur["corrupt"] += 1
                 elif tag:

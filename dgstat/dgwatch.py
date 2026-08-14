@@ -23,7 +23,9 @@ LEDGER = os.environ.get(
 # 닫는 괄호를 요구하지 않는다. 전원 붕괴 순간 "[ 810.864105" 뒤가 깨져도
 # 시각은 살아 있으므로 회차 기준시각을 살릴 수 있다.
 # 부트로더의 "[3720]" 같은 정수 표기는 \d+\.\d+ 에 걸리지 않아 오탐이 없다.
+# 마커·시각 인식은 관대하게. 전원 붕괴로 줄이 깨져도 회차를 놓치지 않는다.
 TS = re.compile(r"^\[\s*(\d+\.\d+)")
+CLEAN = re.compile(r"^\[\s*(\d+\.\d+)\]\[\s*[CT]?\d+\]")  # 노이즈 배제용
 DG2 = re.compile(r"DG2\|([A-Z]{2})\|")
 # 깨진 마커의 꼬리. 마커 형식이 DG2|XX|cN|tNNN 이라 끝부분은 살아남는 일이 많다.
 CORRUPT = re.compile(r"c\d\|t\d+")
@@ -138,7 +140,10 @@ def main():
                 continue
 
             if up is not None:
-                cur["last"] = max(cur["last"], up)
+                # 생존시간은 깨끗한 커널 줄에서만 갱신한다. 전원 붕괴 노이즈가
+                # 시각처럼 보여 생존시간을 과대계산하는 것을 막는다.
+                if CLEAN.match(line):
+                    cur["last"] = max(cur["last"], up)
                 idle = time.time()
                 if tag == "??":
                     cur["corrupt"] += 1
