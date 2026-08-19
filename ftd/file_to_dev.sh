@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.12.0'
+FTD_VERSION='2.13.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -78,6 +78,7 @@ FTD_TFTP_PATH='/tftpboot'
 FTD_SERVER_IP='auto'
 FTD_HTTP_PORT='80'
 FTD_AP_IP='auto'
+FTD_AP_OUI='00:08:52'    # AP 판정용 MAC 앞 3바이트(다볼링크). 공백 구분 다중 지정 가능
 FTD_SERIAL_DEV='auto'
 FTD_AUTO_LOGIN='off'
 FTD_LOGIN_USER='root'
@@ -108,6 +109,21 @@ _ftd_enx_list() {
         awk '/enx[a-f0-9]+/ && / inet /{split($4,a,"/"); print $2, a[1]}'
 }
 
+# ping 응답만으로는 AP 판정이 안 된다 — 공인망/사내망 게이트웨이도 `.254` 를 쓰는 일이 있고,
+# 그쪽이 enx 목록에서 먼저 나오면 AP 대신 게이트웨이로 FW 를 쏜다(2026-08-19 실제 사고).
+# 그래서 ARP MAC 앞 3바이트가 FTD_AP_OUI 인지까지 본다. 못 찾으면 기존 동작(첫 ping 응답)으로 폴백.
+_ftd_is_ap_mac() {
+    local ip="$1" dev="$2" mac oui
+    mac=$(ip neigh show "$ip" ${dev:+dev "$dev"} 2>/dev/null \
+        | grep -oE 'lladdr +[0-9a-fA-F:]{17}' | awk '{print $2}' | head -1)
+    [ -z "$mac" ] && return 1
+    mac="${mac,,}"
+    for oui in $FTD_AP_OUI; do
+        [ "${mac:0:8}" = "${oui,,}" ] && return 0
+    done
+    return 1
+}
+
 # 후보 옥텟을 우선순위대로 받아 ping 응답하는 (인터페이스, 호스트IP, AP IP) 한 짝을 확정.
 # 754와 그 외 AP를 동시에 꽂아둘 수 있으므로 서브넷을 짝지어야 한다 —
 # HTTP 서버 IP(_DETECTED_HOST_IP)가 AP와 다른 서브넷이면 AP가 wget 을 못 받는다.
@@ -117,8 +133,9 @@ _ftd_enx_list() {
 _ftd_detect_network() {
     local octets="${*:-254 1}" oct if_name host ap
     local fb_if="" fb_host="" fb_ap=""
+    local pg_if="" pg_host="" pg_ap=""   # ping 은 되지만 OUI 미확인 — 마지막 폴백
 
-    _DETECTED_ENX_IF=""; _DETECTED_HOST_IP=""; _DETECTED_AP_IP=""
+    _DETECTED_ENX_IF=""; _DETECTED_HOST_IP=""; _DETECTED_AP_IP=""; _DETECTED_AP_VERIFIED=0
 
     for oct in $octets; do
         while read -r if_name host; do
@@ -126,14 +143,19 @@ _ftd_detect_network() {
             ap="${host%.*}.${oct}"
             # 첫 후보는 ping 이 다 죽었을 때 쓸 폴백 (기존 '첫 enx' 동작 유지)
             [ -z "$fb_if" ] && { fb_if="$if_name"; fb_host="$host"; fb_ap="$ap"; }
-            if ping -c1 -W1 "$ap" &>/dev/null; then
+            ping -c1 -W1 "$ap" &>/dev/null || continue
+            if _ftd_is_ap_mac "$ap" "$if_name"; then
                 _DETECTED_ENX_IF="$if_name"; _DETECTED_HOST_IP="$host"; _DETECTED_AP_IP="$ap"
+                _DETECTED_AP_VERIFIED=1
                 return 0
             fi
+            [ -z "$pg_if" ] && { pg_if="$if_name"; pg_host="$host"; pg_ap="$ap"; }
         done < <(_ftd_enx_list)
     done
 
-    if [ -n "$fb_if" ]; then
+    if [ -n "$pg_if" ]; then
+        _DETECTED_ENX_IF="$pg_if"; _DETECTED_HOST_IP="$pg_host"; _DETECTED_AP_IP="$pg_ap"
+    elif [ -n "$fb_if" ]; then
         _DETECTED_ENX_IF="$fb_if"; _DETECTED_HOST_IP="$fb_host"; _DETECTED_AP_IP="$fb_ap"
     else
         # IP 없으면 링크에 존재하는 첫 enx 이름만 표시 (IP 미검출)
@@ -795,9 +817,13 @@ _ftd_transfer() {
     # 값 결정 — AP를 먼저 확정하고 HTTP 서버 IP를 같은 서브넷 enx 로 맞춘다.
     # (서로 다른 서브넷이면 AP가 wget 을 못 받는다)
     if [ -n "$ap_ip_ovr" ]; then
-        local ovr_host
-        ovr_host=$(_ftd_enx_list | awk -v s="${ap_ip_ovr%.*}." 'index($2,s)==1{print $2; exit}')
-        [ -n "$ovr_host" ] && _DETECTED_HOST_IP="$ovr_host"
+        local ovr_if="" ovr_host=""
+        read -r ovr_if ovr_host < <(_ftd_enx_list | awk -v s="${ap_ip_ovr%.*}." 'index($2,s)==1{print; exit}')
+        [ -n "$ovr_host" ] && { _DETECTED_HOST_IP="$ovr_host"; _DETECTED_ENX_IF="$ovr_if"; }
+        # 직접 지정도 헤더 경고 기준은 같다 — 낡은 감지 결과가 남지 않게 여기서 다시 판정.
+        # ARP 항목이 없으면 MAC을 못 읽어 멀쩡한 AP도 경고가 뜨므로 ping 으로 먼저 채운다.
+        ping -c1 -W1 "$ap_ip_ovr" &>/dev/null
+        _ftd_is_ap_mac "$ap_ip_ovr" "$ovr_if" && _DETECTED_AP_VERIFIED=1 || _DETECTED_AP_VERIFIED=0
     else
         # 배포할 FW 종류로 옥텟을 하나로 고정 → 다른 기종 AP에 잘못 flash 되는 일 방지
         _ftd_detect_network "$(_ftd_ap_octet_for_fw "$file_name")"
@@ -956,7 +982,10 @@ _ftd_print_header() {
     echo -e "  ${step_copy} ${_F_DIM}▸${_F_RST} ${step_http} ${_F_DIM}▸${_F_RST} ${step_send}"
     _ln
     echo -e "  File : ${_F_YELLOW}${file}${_F_RST} ${_F_DIM}(${fw_size}, ${fw_date})${_F_RST}"
-    echo -e "  AP   : ${_F_YELLOW}${ap}${_F_RST} ${enx_tag}"
+    local ap_tag=""
+    [ "${_DETECTED_AP_VERIFIED:-0}" = "1" ] \
+        || ap_tag=" ${_F_RED}⚠ AP 미확인${_F_RST}${_F_DIM}(MAC이 ${FTD_AP_OUI} 아님 — 게이트웨이일 수 있음)${_F_RST}"
+    echo -e "  AP   : ${_F_YELLOW}${ap}${_F_RST} ${enx_tag}${ap_tag}"
     echo -e "  Host : ${_F_YELLOW}${host}:${port}${_F_RST}"
     echo -e "  Mode : ${mode_tag}"
     [ "$do_upg" = "1" ] && [ -n "$opts" ] && echo -e "  Opts : ${_F_RED}${opts}${_F_RST}"
