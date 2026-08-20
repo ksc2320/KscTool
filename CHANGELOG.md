@@ -179,6 +179,22 @@
 
 ## ftd (file_to_dev.sh)
 
+### [2.14.0] — 2026-08-20
+
+#### 변경 내용
+- `dv up` / `dv file` / `dv dbg` 가 AP에 보내는 다운로드 명령에 **busybox tftp 폴백** 추가 — 901(DV01-901H)처럼 wget이 없는 기종에서 `wget: not found` 로 멈추던 것 해결
+- `dv get`(fwdg)도 `tftp` 링크가 없는 기종을 위해 `busybox tftp -p` 폴백 추가
+
+#### 배경 (901 조사 결과)
+- 901 busybox 빌드 설정: `# CONFIG_WGET is not set` → wget 애플릿 자체가 컴파일 안 됨 (`nm busybox_unstripped`에 `wget_main` 없음)
+- `package/Makefile:114-115` 가 이미지 생성 시 `/usr/bin/tftp`, `/usr/bin/ftpget` 링크를 삭제 → 링크만 없고 애플릿(`tftp_main`, `ftpgetput_main`)은 바이너리에 남아 있다
+- 그래서 `busybox tftp` 직접 호출이 901에서 유일하게 되는 다운로드 경로. curl·uclient-fetch·dropbear 전부 미포함
+
+#### Fixed / Changed
+- `_ftd_fetch_cmd()` 신설 — `wget URL -O F || busybox tftp -g -r F IP` 한 줄 생성. 명령 생성 지점 2곳(`_ftd_transfer`, `_ftd_dbg`)이 이 함수만 사용
+- 폴백은 wget 있는 기종(609H 등)에서 `||` 뒤가 실행되지 않으므로 동작 변화 없음
+- 제약: busybox tftp 는 blksize 미지원(512B 고정) → **32MB 이상 파일은 tftp 경로로 못 받는다**. 901 이미지 23MB 는 문제 없음. 호스트 tftpd(`tftpd-hpa`, 루트 `/tftpboot`)가 떠 있어야 폴백이 동작
+
 ### [2.13.0] — 2026-08-19
 
 #### 변경 내용

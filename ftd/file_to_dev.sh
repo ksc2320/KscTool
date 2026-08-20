@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.13.0'
+FTD_VERSION='2.14.0'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -796,6 +796,17 @@ _ftd_fzf_select() {
 # ══════════════════════════════════════════════════════════════════════════
 #  TRANSFER ENGINE — 실제 전송 (시리얼 or 클립보드)
 # ══════════════════════════════════════════════════════════════════════════
+
+# AP 다운로드 명령 — wget 없는 기종은 busybox tftp 로 폴백
+#   · 901(DV01-901H): busybox WGET 미컴파일(build .config `# CONFIG_WGET is not set`) +
+#     package/Makefile 이 /usr/bin/tftp, /usr/bin/ftpget 링크를 지운다 → busybox 직접 호출만 가능
+#   · ponytail: TFTP blksize 미지원(512B 고정)이라 32MB 이상 파일은 tftp 경로로 못 받는다.
+#     그때는 wget 있는 기종이거나 U-boot tftpboot 로 가야 함
+_ftd_fetch_cmd() {
+    local file="$1" server="$2" port="$3"
+    echo "wget http://${server}:${port}/${file} -O ${file} || busybox tftp -g -r ${file} ${server}"
+}
+
 _ftd_transfer() {
     local file_name="" do_upgrade=0 upgrade_n=0 dry=0 ap_ip_ovr=""
 
@@ -836,8 +847,7 @@ _ftd_transfer() {
     sysupgrade_opts="${sysupgrade_opts# }"
 
     # 명령 구성 — .zip 은 DVF-754 davo_upgrade, 그 외는 sysupgrade
-    local wget_url="http://${server_ip}:${http_port}/${file_name}"
-    local cmd_wget="cd /tmp && wget ${wget_url} -O ${file_name}"
+    local cmd_wget="cd /tmp && $(_ftd_fetch_cmd "$file_name" "$server_ip" "$http_port")"
     local cmd_upgrade upgrade_name upg_opts
     if [[ "$file_name" == *.zip ]]; then
         cmd_upgrade="davo_upgrade /tmp/${file_name}"
@@ -1878,7 +1888,7 @@ _ftd_dbg() {
     local -a dbg_steps=(
         "/etc/init.d/${bin} stop 2>/dev/null; killall ${bin} 2>/dev/null; sleep 1"
         "rm -f ${bin}"
-        "wget http://${server}:${port}/${bin}"
+        "$(_ftd_fetch_cmd "$bin" "$server" "$port")"
         "chmod 755 ${bin}"
         "./${bin} ${run_opts} &"
     )
@@ -1934,7 +1944,8 @@ _ftd_get() {
     local t0; t0=$(date +%s)
 
     # AP에 주입할 명령 (tftp put)
-    local tftp_cmd="tftp -p -l ${remote} -r ${local_name} ${server}"
+    # 901 은 /usr/bin/tftp 링크가 없어 busybox 직접 호출로 폴백 (_ftd_fetch_cmd 주석 참조)
+    local tftp_cmd="tftp -p -l ${remote} -r ${local_name} ${server} || busybox tftp -p -l ${remote} -r ${local_name} ${server}"
 
     echo -e "${_RUN} AP 명령 주입: ${_F_SKY}${tftp_cmd}${_F_RST}"
 
