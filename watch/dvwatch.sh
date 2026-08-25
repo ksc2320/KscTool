@@ -26,7 +26,7 @@
 #    Ctrl+\          마커 삽입 (─── MARK HH:MM:SS ───)
 # ============================================================================
 
-DW_VERSION='1.0.0'
+DW_VERSION='1.0.1'
 DW_CONF_DIR="$HOME/.config/dvwatch"
 DW_CONF="$DW_CONF_DIR/config"
 DW_SESSIONS_DIR="$DW_CONF_DIR/sessions"
@@ -127,7 +127,7 @@ _dw_detect_serial() {
 
     local candidates=()
     [ "$target" = 'auto' ] \
-        && candidates=(/dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyACM0) \
+        && candidates=(/dev/ttyUSB* /dev/ttyACM*) \
         || candidates=("$target")
 
     local found_any=0

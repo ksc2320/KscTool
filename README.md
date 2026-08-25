@@ -42,6 +42,7 @@ KscTool/
 | `aptest` | `aptest/aptest.sh` | AP 실기 디버그 테스트 하네스 |
 | `ucisnap` | `tools/ucisnap.sh` | UCI 설정 스냅샷/diff |
 | `spec` | `tools/spec.sh` | KT 규격서 버전 현황 / 열기 / 경로 / 스캔 |
+| `ttyusb` | `tools/ttyusb.sh` | 시리얼 포트 상태 / 이름 고정 / 점유 해제 |
 
 ---
 

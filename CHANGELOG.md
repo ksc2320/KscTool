@@ -5,6 +5,29 @@
 
 ---
 
+## ttyusb (tools/ttyusb.sh)
+
+### [1.1.0] — 2026-08-25
+
+#### 변경 내용
+- 신규 도구. 시리얼 어댑터를 어느 USB 포트에 꽂아도 권한·이름 문제 없이 바로 쓰게 만든다. `dv ap` 의 chown 수동 작업이 필요 없어진다.
+- 어댑터마다 고정 이름을 붙일 수 있다. `/dev/ttyUSB0,1,2` 번호는 꽂는 순서·구멍마다 밀리지만 고정 이름은 안 바뀌므로, SecureCRT 세션이 엉뚱한 장비에 붙는 사고를 막는다.
+
+#### 사용법
+- `ttyusb` — 꽂혀 있는 포트 목록 (칩/시리얼번호/고정이름/권한/점유 프로세스)
+- `ttyusb setup` — udev 규칙 설치. 한 번만 하면 된다
+  - 권한 개방(0666, dialout) + ModemManager/brltty 가 새 포트를 붙잡지 못하게 차단
+- `ttyusb name <포트> <이름>` — 그 어댑터에 고정 이름 부여 (예: `ttyusb name /dev/ttyUSB1 ttyAP2`)
+  - 현재 할당: `ttyAP0`=FTDI A97FMUVA(609H 콘솔), `ttyAP1`=AB8ACZJA, `ttyAP2`=A505C34X, `ttyRELAY`=CH340 릴레이
+  - 시리얼번호 없는 어댑터(CH340)는 칩 종류로만 잡으므로 같은 칩 2개면 이름이 겹친다 — 경고 출력
+- `ttyusb free [포트]` — 포트를 물고 있는 프로세스 정리 + 묵은 락파일 제거. SecureCRT 는 탭 전체가 끊기므로 기본은 확인 프롬프트 (`-y` 로 생략)
+
+#### Fixed / Changed
+- 이름표를 `99-ttyusb-names.rules` 로 분리 — `setup` 을 다시 돌려도 붙여둔 이름이 안 날아간다
+- 내부 sudo 를 `sudo -S`(stdin) 에서 `SUDO_ASKPASS` 방식으로 교체. `내용 | _t_sudo tee -a 파일` 패턴에서 sudo 가 그 내용을 비밀번호로 삼켜 append 가 조용히 실패했고, 반대로 비밀번호가 파일에 기록될 수 있는 구조였다
+
+---
+
 ## dotfiles (.bash_functions)
 
 ### [1.1.0] — 2026-07-22
@@ -151,6 +174,11 @@
 
 ## dvwatch (dvwatch.sh)
 
+### [1.0.1] — 2026-08-25
+
+#### Fixed / Changed
+- `--serial auto` 후보 목록을 glob(`/dev/ttyUSB*`)으로 교체 (ftd 2.14.1과 동일 이유). 스크립트 자체는 여전히 미검증·사용 금지 상태
+
 ### [1.0.0] — 2026-04-03
 
 #### 추가
@@ -178,6 +206,11 @@
 ---
 
 ## ftd (file_to_dev.sh)
+
+### [2.14.1] — 2026-08-25
+
+#### Fixed / Changed
+- 시리얼 포트 탐색 목록을 `ttyUSB0/1/2` 하드코딩에서 glob(`/dev/ttyUSB*`)으로 교체 — 어댑터를 3개 이상 꽂으면 `ttyUSB3` 이상이 생기는데 목록에 안 떠서 선택할 수 없었다. `doctor` 진단 목록도 동일
 
 ### [2.14.0] — 2026-08-20
 

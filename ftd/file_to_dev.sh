@@ -23,7 +23,7 @@
 #        git clone 또는 복사 후 → ./file_to_dev.sh init
 # ============================================================================
 
-FTD_VERSION='2.14.0'
+FTD_VERSION='2.14.1'
 
 # ── 컬러 ─────────────────────────────────────────────────────────────────
 _F_RED='\033[1;31m';  _F_GREEN='\033[1;32m';  _F_YELLOW='\033[1;33m'
@@ -294,7 +294,8 @@ _ftd_init() {
 
     # 사용 가능한 포트 스캔
     local found_devs=()
-    for d in /dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2 /dev/ttyACM0; do
+    # 번호를 고정하지 않는다. 어댑터를 여러 개 꽂으면 ttyUSB3 이상도 생긴다.
+    for d in /dev/ttyUSB* /dev/ttyACM*; do
         [ -c "$d" ] && found_devs+=("$d")
     done
 
@@ -304,7 +305,7 @@ _ftd_init() {
         echo -e "  ${_WARN} 시리얼 포트 없음 (클립보드 모드 사용)"
     fi
     echo ""
-    echo -e "  ${_F_CYAN}1)${_F_RST} auto   ${_F_DIM}ttyUSB0→1→2 순 자동 탐색${_F_RST}"
+    echo -e "  ${_F_CYAN}1)${_F_RST} auto   ${_F_DIM}ttyUSB 번호 순 자동 탐색${_F_RST}"
     for i in "${!found_devs[@]}"; do
         echo -e "  ${_F_CYAN}$((i+2)))${_F_RST} ${found_devs[$i]}"
     done
@@ -1518,9 +1519,10 @@ _ftd_doctor() {
     else
         echo -e "${_FAIL} ${_F_RED}미포함${_F_RST} — ${_F_YELLOW}sudo usermod -aG dialout \$USER${_F_RST} 후 재로그인"
     fi
-    for d in /dev/ttyUSB0 /dev/ttyUSB1 /dev/ttyUSB2; do
+    for d in /dev/ttyUSB*; do
+        # 하나도 없으면 glob 이 풀리지 않고 그대로 남는다
+        if [ ! -c "$d" ]; then printf "    %-20s " "ttyUSB"; echo -e "${_F_DIM}없음${_F_RST}"; break; fi
         printf "    %-20s " "$d"
-        if [ ! -c "$d" ]; then echo -e "${_F_DIM}없음${_F_RST}"; continue; fi
         local rc
         rc=$(python3 -c "
 import serial, sys, errno as E
