@@ -43,8 +43,10 @@ _noti_mask() {
 
 _noti_log() {
     mkdir -p "$_NOTI_CONF_DIR"
+    local msg
+    msg=$(printf '%s' "$4" | tr '\n\t' '  ')   # 여러 줄이면 이력이 깨진다
     printf '%s | %-8s | %-6s | %-4s | %s\n' \
-        "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "$2" "$3" "${4:0:70}" >> "$_NOTI_LOG"
+        "$(date '+%Y-%m-%d %H:%M:%S')" "$1" "$2" "$3" "${msg:0:70}" >> "$_NOTI_LOG"
 }
 
 # 디스코드 메시지ID ↔ 세션ID 기록. 사용자가 그 알림에 "답장" 하면 어느 세션·어느 질문인지 찾는다.

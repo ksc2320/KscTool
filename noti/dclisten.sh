@@ -3,6 +3,7 @@
 # Claude Code 의 Monitor 도구가 이 출력을 이벤트로 받아 작업 중에 지시를 전달한다.
 #
 #   ~/KscTool/noti/dclisten.sh check     설정·토큰·권한 점검
+#   ~/KscTool/noti/dclisten.sh users     채널에 글 쓴 사람들의 숫자 ID
 #   ~/KscTool/noti/dclisten.sh once      한 번만 확인하고 종료
 #   ~/KscTool/noti/dclisten.sh watch     계속 폴링 (Monitor 용)
 #   ~/KscTool/noti/dclisten.sh reset     "읽은 위치"를 지금으로 리셋
@@ -32,16 +33,42 @@ _dc_curl() {
     curl -s -m 20 --config <(printf 'header = "Authorization: Bot %s"\n' "$TOKEN") "$@"
 }
 
-_dc_require() {
+# 연결에 꼭 필요한 것 (토큰·채널)
+_dc_require_conn() {
     local bad=0
     [ -z "$TOKEN" ] && { echo "봇 토큰이 없다 → noti setkey bot-token" >&2; bad=1; }
     [ -z "$CHAN" ]  && { echo "채널 ID가 없다 → 설정 NOTI_DISCORD_CHANNEL_ID" >&2; bad=1; }
+    return $bad
+}
+
+# 실제 지시를 받으려면 화이트리스트까지 있어야 한다
+_dc_require() {
+    _dc_require_conn || return 1
     if [ -z "$ALLOW" ]; then
         echo "허용 사용자ID가 없다 → 설정 NOTI_DISCORD_ALLOW_USER" >&2
         echo "  이 값이 없으면 채널에 들어온 누구의 메시지든 지시로 읽는다. 반드시 지정할 것." >&2
-        bad=1
+        echo "  숫자 ID 확인: ~/KscTool/noti/dclisten.sh users" >&2
+        return 1
     fi
-    return $bad
+    return 0
+}
+
+# 최근에 이 채널에 글을 쓴 사람들의 숫자 ID (화이트리스트에 넣을 값 찾기용)
+_dc_cmd_users() {
+    _dc_require_conn || return 1
+    local resp code
+    resp=$(_dc_curl -w '\n%{http_code}' "${_DC_API}/channels/${CHAN}/messages?limit=100")
+    code=$(printf '%s' "$resp" | tail -n1)
+    [ "$code" != "200" ] && { echo "채널 읽기 실패 (HTTP $code)" >&2; return 1; }
+    echo "── 최근 이 채널에 글을 쓴 사람 (봇·웹훅 제외) ──"
+    printf '%s' "$resp" | sed '$d' | jq -r '
+        [ .[] | select(.webhook_id == null) | select(.author.bot != true)
+              | {id: .author.id, name: (.author.global_name // .author.username), un: .author.username} ]
+        | group_by(.id) | map({id: .[0].id, name: .[0].name, un: .[0].un, n: length})
+        | sort_by(-.n)[]
+        | "  \(.id)   \(.un)  (\(.name))  글 \(.n)건"'
+    echo
+    echo "  설정에 넣기: noti setkey NOTI_DISCORD_ALLOW_USER   (또는 config 직접 편집)"
 }
 
 # 답장 대상 조회: 메시지ID → "제목|세션ID"
@@ -54,7 +81,7 @@ _dc_thread_lookup() {
 
 _dc_cmd_check() {
     echo "── dclisten 점검 ──"
-    _dc_require || return 1
+    _dc_require_conn || return 1
     local me code
     me=$(_dc_curl -w '\n%{http_code}' "${_DC_API}/users/@me")
     code=$(printf '%s' "$me" | tail -n1)
@@ -86,6 +113,11 @@ _dc_cmd_check() {
         return 1
     fi
     echo "✓ 본문 읽기 OK"
+    if [ -z "$ALLOW" ]; then
+        echo "✗ 허용 사용자ID 미설정 — 지금 상태로는 감시를 시작할 수 없다"
+        echo "  → ~/KscTool/noti/dclisten.sh users 로 숫자 ID를 확인해 넣어라"
+        return 1
+    fi
     printf '  허용 사용자ID : %s\n' "$ALLOW"
     printf '  폴링 간격     : %s초\n' "$_DC_INTERVAL"
     printf '  읽은 위치     : %s\n' "$( [ -f "$_DC_LAST" ] && cat "$_DC_LAST" || echo '(없음 — 첫 실행은 현재 시점부터)' )"
@@ -144,6 +176,8 @@ _dc_poll_once() {
         fi
 
         label="새메시지"
+        # ! 로 시작하면 상주 봇(dcbot)이 처리한다. 세션은 알고만 있고 손대지 않는다.
+        case "$content" in "!"*) label="봇담당(dcbot)" ;; esac
         if [ -n "$ref" ] && look=$(_dc_thread_lookup "$ref"); then
             title="${look%%|*}"; sess="${look##*|}"
             if [ "$sess" = "${CLAUDE_CODE_SESSION_ID:-}" ]; then
@@ -167,7 +201,11 @@ _dc_poll_once() {
 _dc_cmd_watch() {
     _dc_require || return 1
     echo "📡 디스코드 채널 감시 시작 (${_DC_INTERVAL}초 간격). 답장하면 원본 질문을 찾아 함께 알려준다."
+    # 살아있는 세션이 보고 있다는 표시. dcbot 은 이게 최근이면 손대지 않고 양보한다.
+    local hb="${_DC_CONF_DIR}/watcher.heartbeat"
+    trap 'rm -f "$hb"; exit 0' TERM INT
     while true; do
+        printf '%s %s\n' "$(date +%s)" "${CLAUDE_CODE_SESSION_ID:-unknown}" > "$hb"
         _dc_poll_once || true
         sleep "$_DC_INTERVAL"
     done
@@ -175,6 +213,7 @@ _dc_cmd_watch() {
 
 case "${1:-help}" in
     check) _dc_cmd_check ;;
+    users) _dc_cmd_users ;;
     once)  _dc_require && _dc_poll_once ;;
     watch) _dc_cmd_watch ;;
     reset) _dc_cmd_reset ;;

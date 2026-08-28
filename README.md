@@ -21,6 +21,12 @@ KscTool/
 ├── aptest/                     # AP 실기 디버그 테스트 하네스
 │   ├── aptest.sh               # 메인 (alias: aptest)
 │   └── suites/smoke.json       # 기본 read-only smoke suite
+├── noti/                       # 휴대폰 알림 · 원격 지시
+│   ├── noti.sh                 # 알림 전송 (alias: noti)
+│   ├── dclisten.sh             # 디스코드 지시 수신 (Monitor 용)
+│   ├── dcsession.sh            # 다른 세션 대화 읽기
+│   ├── dcbot.sh                # 상주 봇 (세션 없어도 디스코드로 지시)
+│   └── notirun.sh              # 명령 감싸서 끝나면 알림 (alias: notirun / ntr)
 ├── tools/                      # 기타 유틸리티
 │   ├── obs.sh                  # OBS 제어 (alias: obs)
 │   ├── gen_index.sh            # 인덱스 생성
@@ -43,6 +49,11 @@ KscTool/
 | `ucisnap` | `tools/ucisnap.sh` | UCI 설정 스냅샷/diff |
 | `spec` | `tools/spec.sh` | KT 규격서 버전 현황 / 열기 / 경로 / 스캔 |
 | `ttyusb` | `tools/ttyusb.sh` | 시리얼 포트 상태 / 이름 고정 / 점유 해제 |
+| `noti` | `noti/noti.sh` | 휴대폰 알림 (Discord/ntfy/Telegram, 레벨별 라우팅) |
+| (직접실행) | `noti/dclisten.sh` | 디스코드 채널에서 지시 수신 |
+| (직접실행) | `noti/dcsession.sh` | 세션 대화 기록 읽기 |
+| (직접실행) | `noti/dcbot.sh` | 상주 봇 — 세션 없어도 디스코드로 지시·응답 |
+| `notirun` / `ntr` | `noti/notirun.sh` | 오래 걸리는 명령 감싸기 — 끝나면 알림, 실패면 폰이 울림 (`ntr`은 짧은 별칭) |
 
 ---
 
