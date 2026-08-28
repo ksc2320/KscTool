@@ -43,6 +43,16 @@ rsync -a --delete "$CLAUDE_SRC/hooks/" "$DEST/claude/hooks/"
 mkdir -p "$DEST/claude/skills"
 rsync -a --delete "$CLAUDE_SRC/skills/" "$DEST/claude/skills/"
 
+# ── 도구 설정 (~/.devtools) ───────────────────────────────
+# 사용자 결정(2026-08-28): 비공개 저장소이므로 토큰·접속정보까지 통째로 백업한다.
+# 이게 없으면 디스크가 죽었을 때 웹훅·봇토큰 재발급부터 다시 해야 한다.
+# 로그·산출물은 매일 바뀌기만 하고 복구 가치가 없어 뺀다.
+mkdir -p "$DEST/devtools"
+rsync -a --delete \
+  --exclude='*.log' --exclude='logs/' --exclude='runs/' \
+  --exclude='artifacts/' --exclude='*.pid' --exclude='*.lock' \
+  "$HOME/.devtools/" "$DEST/devtools/"
+
 # ── Codex ─────────────────────────────────────────────────
 # 규칙·설정만. auth.json(자격증명)·sessions·skills(=Claude 쪽 심볼릭 링크)는 제외한다.
 CODEX_SRC="$HOME/.codex"
