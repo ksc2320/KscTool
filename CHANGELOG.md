@@ -5,6 +5,29 @@
 
 ---
 
+## dvbuild (build/dvbuild.sh)
+
+### [1.0.0] — 2026-08-28
+
+#### 변경 내용
+- 신규 도구. **프로젝트별 빌드 명령을 기억해서 도커 안에서 대신 실행한다.** 호스트에서 make를 돌려 host/target 툴체인이 섞이는 사고를 원천 차단한다.
+- 컨테이너가 꺼져 있으면 켜고, **켠 채로 둔다**(끄지 않는다 — 나중에 터미널 붙일 수 있으니).
+- **이미 빌드 중이면 아무것도 하지 않고 종료(exit 3)한다.** 같은 트리를 동시에 빌드해 `build_dir`이 깨지던 문제를 막는다.
+- 빌드는 **전용 새 터미널 창**에 띄운다. 열려있는 창에 키를 넣지 않으므로 키보드·한글 IME를 뺏지 않는다.
+
+#### 사용법
+- `dvbuild 609h` — 609H 전체 빌드 (`bear --append -- make -j6 V=s`)
+- `dvbuild 609h package/feeds/davo/dvmgmt/compile` — 부분 빌드
+- `dvbuild 754` — DVF-754 `./dvbuild_mode.sh 3` (ab). 인자로 모드 지정: 0 flat / 1 fastboot / 2 fota / 3 ab
+- `dvbuild -n <proj>` — 새 창 없이 현재 셸에서. `dvbuild log` — 마지막 빌드 로그 tail -f
+- 로그는 `~/.devtools/dvbuild/logs/` 에 남고 `latest` 심볼릭 링크가 항상 최근 것을 가리킨다.
+
+#### 구현 메모
+- `docker exec`에 **`-t` 필수**. `dvbuild_mode.sh`가 내부에서 `tee /dev/tty`를 쓰는데, pty가 없으면 `No such device or address`로 죽으면서 마지막 줄 판정이 깨져 **빌드 성공을 BUILD FAIL로 오판**한다.
+- 754는 `-u $(id -u):$(id -g)`로 진입(컨테이너 내 `turbox`), 609H는 기본 사용자(`davo`) 그대로.
+
+---
+
 ## notirun (noti/notirun.sh)
 
 ### [1.0.0] — 2026-08-28

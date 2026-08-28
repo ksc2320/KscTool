@@ -42,6 +42,7 @@ KscTool/
 | `scs` | `svn/svn_commit.sh` | SVN 커밋 |
 | `bep` | `build/build_error_parse.sh` | 빌드 에러 파서 |
 | `rbc` | `build/rebuild_changed.sh` | 변경분 재빌드 |
+| `dvbuild` / `dvb` | `build/dvbuild.sh` | 프로젝트별 도커 빌드 (609h/754) — 컨테이너 자동 기동, 중복 빌드 차단, 새 창에 표시 |
 | `obs` | `tools/obs.sh` | OBS 제어 |
 | `dvwatch` | `watch/dvwatch.sh` | AP 로그 감시 |
 | `dvcon` | `watch/dvcon.sh` | AP SSH 연결 |
