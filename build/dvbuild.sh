@@ -5,7 +5,7 @@
 #  프로젝트마다 컨테이너·작업경로·빌드명령이 달라서 매번 헷갈린다. 표로 박아둔다.
 #  호스트에서 make 돌리면 host/target 툴체인이 섞여 트리가 깨지므로 항상 컨테이너 안.
 # ============================================================================
-DVBUILD_VERSION='1.2.0'
+DVBUILD_VERSION='1.3.0'
 set -u
 
 DVB_CONF_DIR="$HOME/.devtools/dvbuild"
@@ -26,8 +26,10 @@ dvbuild — 프로젝트별 도커 빌드
                                                  (피드 경로는 tmp/.packageinfo 에서 찾는다.
                                                   609H=davo, 754=tcatctl 등 트리마다 다르다)
   옵션
-    -n         새 터미널 창 없이 현재 셸에서 실행
-    log        마지막 빌드 로그 따라가기 (tail -f)
+    (기본)     새 터미널 창을 띄워서 실행
+    -b         창 없이 백그라운드 (`dvbuild log` 로 본다)
+    -n         현재 셸에서 붙잡고 실행 (출력이 그대로 나온다)
+    log [proj] 빌드 로그 따라가기 (tail -f). proj 주면 그 프로젝트 것
     init       alias 등록
     version    버전
 U
@@ -62,11 +64,16 @@ case "${1:-}" in
     ''|-h|--help|help) usage; exit 0 ;;
     version|-V)        echo "dvbuild v${DVBUILD_VERSION}"; exit 0 ;;
     init)              do_init; exit 0 ;;
-    log)               exec tail -f "$DVB_LOGDIR/latest" ;;
+    log)               exec tail -f "$DVB_LOGDIR/latest${2:+_$2}" ;;
 esac
 
-NEWWIN=1
-[ "${1:-}" = "-n" ] && { NEWWIN=0; shift; }
+# 기본은 새 터미널 창. gnome-terminal 3.x 는 밖에서 기존 창에 탭을 못 붙인다
+# (--tab 은 한 명령줄 안에서만 묶인다). 창이 싫으면 -b.
+MODE=win
+case "${1:-}" in
+    -b) MODE=bg; shift ;;
+    -n) MODE=fg; shift ;;
+esac
 PROJ="$1"; shift
 
 # ── 프로젝트 표 ──────────────────────────────────────────────────────────────
@@ -117,6 +124,7 @@ fi
 
 LOG="$DVB_LOGDIR/${PROJ}_$(date +%m%d_%H%M%S).log"
 ln -sfn "$LOG" "$DVB_LOGDIR/latest"
+ln -sfn "$LOG" "$DVB_LOGDIR/latest_$PROJ"   # 609h/754 동시 빌드 때 섞이지 않게
 
 # -t 필수: dvbuild_mode.sh 가 tee /dev/tty 를 쓴다. 없으면 성공을 FAIL로 오판한다
 RUN="docker exec -t $UOPT -w $WD $CT bash -lc \"$CMD\""
@@ -126,14 +134,24 @@ echo "컨테이너 : $CT${STARTED}"
 echo "작업경로 : $WD"
 echo "명령     : $CMD"
 echo "로그     : $LOG"
-echo "            따라보기 → dvbuild log"
+echo "            따라보기 → dvbuild log $PROJ"
 echo "$(date '+%F %T') | $PROJ | $CMD | $LOG" >> "$DVB_HISTORY"
 
-if [ "$NEWWIN" = 1 ] && [ -n "${DISPLAY:-}" ] && command -v gnome-terminal >/dev/null; then
-    if gnome-terminal --title="build $PROJ" -- bash -c "$INNER; exec bash"; then
+case "$MODE" in
+  win)
+    if [ -n "${DISPLAY:-}" ] && command -v gnome-terminal >/dev/null \
+       && gnome-terminal --title="build $PROJ" -- bash -c "$INNER; exec bash"; then
         echo "새 터미널 창에서 빌드 중."
         exit 0
     fi
     echo "새 창 실패 — 현재 셸에서 실행한다"
-fi
-bash -c "$INNER"
+    bash -c "$INNER"
+    ;;
+  bg)
+    setsid nohup bash -c "$INNER" >/dev/null 2>&1 &
+    echo "백그라운드에서 빌드 중 (pid $!). 보려면: dvbuild log"
+    ;;
+  fg)
+    bash -c "$INNER"
+    ;;
+esac
