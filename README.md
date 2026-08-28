@@ -27,6 +27,11 @@ KscTool/
 │   ├── dcsession.sh            # 다른 세션 대화 읽기
 │   ├── dcbot.sh                # 상주 봇 (세션 없어도 디스코드로 지시)
 │   └── notirun.sh              # 명령 감싸서 끝나면 알림 (alias: notirun / ntr)
+├── scripts/                    # cron 자동화
+│   ├── push_ksctool.sh         # KscTool 매일 02:30 push
+│   ├── backup_dotfiles.sh      # dotfiles 주간 백업
+│   ├── backup_memory.sh        # Claude/Codex 공용 메모리 4시간마다 커밋
+│   └── claude_refresh.sh       # Claude Code 세션 초기화
 ├── tools/                      # 기타 유틸리티
 │   ├── obs.sh                  # OBS 제어 (alias: obs)
 │   ├── gen_index.sh            # 인덱스 생성
