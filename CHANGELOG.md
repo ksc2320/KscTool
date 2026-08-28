@@ -7,6 +7,22 @@
 
 ## dvbuild (build/dvbuild.sh)
 
+### [1.2.0] — 2026-08-28
+
+#### 변경 내용
+- **부분 빌드에 패키지 이름만 주면 된다.** 피드 경로는 `tmp/.packageinfo`에서 찾는다.
+- 754 owrt 서브트리 부분 빌드 지원 추가. `turbox_build.sh`엔 패키지 단위 옵션이 없어서(`--ap-i`는 이미지 단위) make를 직접 건다.
+
+#### 사용법
+- `dvbuild 609h dvmgmt` / `dvbuild 754 dvmgmt` — 전체 경로 대신 이름만
+- 전체 make 타겟(`package/.../compile`)을 주면 그대로 쓴다. 기존 방식도 그대로 동작.
+
+#### Fixed / Changed
+- **피드 디렉터리가 트리마다 다르다.** 609H는 `package/feeds/davo/dvmgmt`인데 754는 `package/feeds/tcatctl/dvmgmt`다. 754 안에서도 `dvdyngsp`만 `davo` 피드라 손으로 쓰면 틀린다 — 그래서 `.packageinfo`를 정본으로 삼는다.
+- `kmod-*`처럼 `Package:` 이름이 디렉터리명과 다른 경우 디렉터리명으로 재시도한다(`dvdyngsp`가 이 경우).
+
+---
+
 ### [1.0.0] — 2026-08-28
 
 #### 변경 내용

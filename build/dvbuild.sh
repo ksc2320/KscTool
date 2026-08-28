@@ -5,7 +5,7 @@
 #  프로젝트마다 컨테이너·작업경로·빌드명령이 달라서 매번 헷갈린다. 표로 박아둔다.
 #  호스트에서 make 돌리면 host/target 툴체인이 섞여 트리가 깨지므로 항상 컨테이너 안.
 # ============================================================================
-DVBUILD_VERSION='1.0.0'
+DVBUILD_VERSION='1.2.0'
 set -u
 
 DVB_CONF_DIR="$HOME/.devtools/dvbuild"
@@ -18,10 +18,13 @@ usage() {
 dvbuild — 프로젝트별 도커 빌드
 
   dvbuild 609h                                   전체 빌드 (bear + make -j6)
-  dvbuild 609h package/feeds/davo/dvmgmt/compile 부분 빌드
+  dvbuild 609h dvmgmt                            부분 빌드 (패키지 이름만)
   dvbuild 754                                    dvbuild_mode.sh 3 (ab)
   dvbuild 754 1                                  dvbuild_mode.sh 1 (fastboot)
                                                  0 flat / 1 fastboot / 2 fota / 3 ab
+  dvbuild 754 dvmgmt                             754 owrt 서브트리 부분 빌드
+                                                 (피드 경로는 tmp/.packageinfo 에서 찾는다.
+                                                  609H=davo, 754=tcatctl 등 트리마다 다르다)
   옵션
     -n         새 터미널 창 없이 현재 셸에서 실행
     log        마지막 빌드 로그 따라가기 (tail -f)
@@ -41,6 +44,20 @@ do_init() {
     echo "완료. source ~/.bash_aliases"
 }
 
+# 패키지 이름 → make 타겟. 피드 디렉터리가 트리마다 달라서 .packageinfo 를 정본으로 쓴다
+#   609H: package/feeds/davo/dvmgmt   754: package/feeds/tcatctl/dvmgmt
+mktarget() {   # $1=트리 호스트경로  $2=패키지명 또는 make 타겟
+    case "$2" in */*) echo "$2"; return 0 ;; esac
+    local sm
+    sm=$(awk -v p="$2" '/^Source-Makefile:/{sm=$2} $0=="Package: "p{print sm; exit}' \
+         "$1/tmp/.packageinfo" 2>/dev/null)
+    # kmod-* 처럼 Package 이름과 디렉터리명이 다른 경우: 디렉터리명으로 재시도
+    [ -n "$sm" ] || sm=$(awk -v d="$2" '/^Source-Makefile:/{n=split($2,a,"/"); if(a[n-1]==d){print $2; exit}}' \
+         "$1/tmp/.packageinfo" 2>/dev/null)
+    [ -n "$sm" ] || { echo "패키지를 못 찾았다: $2 ($1/tmp/.packageinfo)" >&2; return 1; }
+    echo "${sm%/Makefile}/compile"
+}
+
 case "${1:-}" in
     ''|-h|--help|help) usage; exit 0 ;;
     version|-V)        echo "dvbuild v${DVBUILD_VERSION}"; exit 0 ;;
@@ -56,11 +73,26 @@ PROJ="$1"; shift
 case "$PROJ" in
   609h|13_1)
     CT=ksc-609h_13_1; WD=/home/workspace; UOPT=""
-    if [ $# -gt 0 ]; then CMD="make $* V=s"; else CMD="bear --append -- make -j6 V=s"; fi
+    if [ $# -eq 0 ]; then
+        CMD="bear --append -- make -j6 V=s"
+    else
+        T=$(mktarget /home/workspace "$1") || exit 1
+        CMD="make $T V=s"
+    fi
     ;;
   754|dvf754|turbox)
-    CT=davo_sdx_dock; WD=/home/turbox/workspace; UOPT="-u $(id -u):$(id -g)"
-    CMD="./dvbuild_mode.sh ${1:-3}"
+    CT=davo_sdx_dock; UOPT="-u $(id -u):$(id -g)"
+    if [ $# -eq 0 ] || [[ "$1" =~ ^[0-3]$ ]]; then
+        WD=/home/turbox/workspace
+        CMD="./dvbuild_mode.sh ${1:-3}"
+    else
+        # 부분 빌드는 owrt 서브트리에서. turbox_build.sh 엔 패키지 단위 옵션이 없다
+        # (--ap-i 는 bootimg/sysimg/usrimg 이미지 단위)
+        OWRT=Pinnacles_apps/apps_proc/owrt
+        WD=/home/turbox/workspace/$OWRT
+        T=$(mktarget /home/ksc/proj/turbox/$OWRT "$1") || exit 1
+        CMD="make $T V=s"
+    fi
     ;;
   *)
     echo "모르는 프로젝트: $PROJ"; usage; exit 1 ;;
