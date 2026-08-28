@@ -79,6 +79,28 @@ _b_thread_lookup() {   # 메시지ID → "제목|세션ID"
     awk -F'\t' -v id="$ref" '$1==id {hit=$4 "|" $2} END{if(hit){print hit; exit 0} exit 1}' "$_B_THREADS"
 }
 
+# 메시지ID → 그 알림을 보낸 세션의 이름 (memo-6b 같은 것). 없으면 빈 값.
+_b_thread_agent() {
+    local ref="$1"
+    [ -z "$ref" ] || [ ! -f "$_B_THREADS" ] && return 1
+    awk -F'\t' -v id="$ref" '$1==id && $6!="" {hit=$6} END{if(hit){print hit; exit 0} exit 1}' "$_B_THREADS"
+}
+
+# 살아있는 세션에 지시를 전달한다. 성공하면 0.
+# 봇 자신은 셸이라 세션을 못 부른다. claude -p 를 전달자로 한 번 띄운다.
+_b_forward() {
+    local agent="$1" title="$2" text="$3" out prompt
+    [ "${NOTI_BOT_FORWARD:-on}" = "on" ] || return 1
+    [ -z "$agent" ] && return 1
+    prompt=$(printf 'ListAgents 로 "%s" 세션이 살아있는지 확인해라.\n\n있으면 SendMessage 로 그 세션에 아래를 그대로 전달하고 "전달함" 이라고만 답하라.\n없으면 아무것도 하지 말고 "없음" 이라고만 답하라.\n\n전달할 내용:\n[휴대폰에서 온 지시] 사용자가 "%s" 알림에 답장했습니다.\n%s' \
+        "$agent" "$title" "$text")
+    out=$(cd "$HOME" && printf '%s' "$prompt" | timeout 180 claude -p --allowedTools "ListAgents,SendMessage" 2>&1)
+    case "$out" in
+        *전달함*) _b_log "전달 성공 → ${agent}"; return 0 ;;
+        *) _b_log "전달 실패/세션없음 → ${agent}: $(printf '%s' "$out" | head -c 120)"; return 1 ;;
+    esac
+}
+
 _b_uuid() { cat /proc/sys/kernel/random/uuid; }
 
 # 봇이 직접 만든 세션인지 (안전하게 --resume 해도 되는 세션)
@@ -122,6 +144,15 @@ _b_handle() {
 
     if [ -n "$ref" ] && look=$(_b_thread_lookup "$ref"); then
         title="${look%%|*}"; src_sess="${look##*|}"
+
+        # 그 알림을 보낸 세션이 아직 살아있으면, 봇이 답하지 말고 그쪽에 넘긴다.
+        # 그 세션은 자기 맥락을 그대로 갖고 있어서 이어서 작업할 수 있다.
+        local agent
+        if agent=$(_b_thread_agent "$ref") && _b_forward "$agent" "$title" "$content"; then
+            _b_post "" "→ **${agent}** 세션에 전달했습니다. (\"${title}\")"
+            return 0
+        fi
+
         if _b_is_bot_session "$src_sess"; then
             sess="$src_sess"; resume=1
             _b_log "답장→봇세션 이어감 ${sess:0:8} (원본: $title)"

@@ -51,11 +51,12 @@ _noti_log() {
 
 # 디스코드 메시지ID ↔ 세션ID 기록. 사용자가 그 알림에 "답장" 하면 어느 세션·어느 질문인지 찾는다.
 _noti_thread_add() {
-    local msg_id="$1" sess="$2" level="$3" title="$4"
+    local msg_id="$1" sess="$2" level="$3" title="$4" agent="${5:-}"
     [ -z "$msg_id" ] && return 0
     mkdir -p "$_NOTI_CONF_DIR"
-    printf '%s\t%s\t%s\t%s\t%s\n' "$msg_id" "${sess:-unknown}" "$level" \
-        "$(printf '%s' "$title" | tr '\t\n' '  ')" "$(date -Iseconds)" >> "$_NOTI_THREADS"
+    # 6열 = 세션 이름(memo-6b 같은 것). 세션 UUID 로는 다른 세션을 부를 수 없어서 따로 적는다.
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$msg_id" "${sess:-unknown}" "$level" \
+        "$(printf '%s' "$title" | tr '\t\n' '  ')" "$(date -Iseconds)" "$agent" >> "$_NOTI_THREADS"
     if [ "$(wc -l < "$_NOTI_THREADS")" -gt $((_NOTI_THREADS_KEEP * 2)) ]; then
         tail -n "$_NOTI_THREADS_KEEP" "$_NOTI_THREADS" > "${_NOTI_THREADS}.tmp" \
             && mv "${_NOTI_THREADS}.tmp" "$_NOTI_THREADS"
@@ -64,7 +65,7 @@ _noti_thread_add() {
 
 # ── 채널별 전송 ($1=제목 $2=본문 $3=레벨 $4=세션ID) ──────────────
 _noti_send_discord() {
-    local title="$1" body="$2" level="$3" sess="$4" icon head payload resp code msg_id
+    local title="$1" body="$2" level="$3" sess="$4" agent="${5:-}" icon head payload resp code msg_id
     [ -z "$NOTI_DISCORD_WEBHOOK" ] && { echo "discord: 웹훅 미설정" >&2; return 1; }
     case "$level" in
         urgent) icon="🚨" ;;
@@ -81,7 +82,7 @@ _noti_send_discord() {
     code=$(printf '%s' "$resp" | tail -n1)
     case "$code" in
         20*) msg_id=$(printf '%s' "$resp" | sed '$d' | jq -r '.id // empty' 2>/dev/null)
-             _noti_thread_add "$msg_id" "$sess" "$level" "$title"
+             _noti_thread_add "$msg_id" "$sess" "$level" "$title" "$agent"
              return 0 ;;
         *)   echo "discord: HTTP $code" >&2; return 1 ;;
     esac
@@ -137,13 +138,14 @@ _noti_route() {
 }
 
 _noti_cmd_send() {
-    local title="알림" level="info" chans="" quiet=0 body="" sess="${CLAUDE_CODE_SESSION_ID:-}"
+    local title="알림" level="info" chans="" quiet=0 body="" agent="" sess="${CLAUDE_CODE_SESSION_ID:-}"
     while [ $# -gt 0 ]; do
         case "$1" in
             -t|--title)   title="$2"; shift 2 ;;
             -l|--level)   level="$2"; shift 2 ;;
             -c|--channel) chans="$2"; shift 2 ;;
             -s|--session) sess="$2";  shift 2 ;;
+            -n|--agent)   agent="$2"; shift 2 ;;
             -q|--quiet)   quiet=1; shift ;;
             --) shift; break ;;
             -*) echo "알 수 없는 옵션: $1" >&2; return 1 ;;
@@ -161,7 +163,7 @@ _noti_cmd_send() {
     local ok=0 fail=0 c
     for c in ${chans//,/ }; do
         case "$c" in
-            discord)  _noti_send_discord  "$title" "$body" "$level" "$sess" ;;
+            discord)  _noti_send_discord  "$title" "$body" "$level" "$sess" "$agent" ;;
             ntfy)     _noti_send_ntfy     "$title" "$body" "$level" ;;
             telegram) _noti_send_telegram "$title" "$body" "$level" ;;
             *) echo "알 수 없는 채널: $c" >&2; false ;;
@@ -324,6 +326,9 @@ _noti_cmd_help() {
     -l, --level   <레벨>        info(기본) | warn | urgent
     -c, --channel <채널>        라우팅 무시하고 직접 지정
     -s, --session <세션ID>      답장 매핑에 쓸 세션 (기본 \$CLAUDE_CODE_SESSION_ID)
+    -n, --agent   <세션이름>    이 세션의 이름(예: memo-6b). ListAgents 로 확인한다.
+                                넣어두면 사용자가 답장했을 때 dcbot 이 **이 세션으로 지시를
+                                전달**한다. 없으면 봇이 대신 답한다(읽기 전용)
     -q, --quiet                 성공 출력 생략
 
   ${_N_B}레벨별 라우팅 (설정에서 변경)${_N_RST}
