@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# backup_dotfiles.sh — 주 1회 dotfiles를 ~/dotfiles/ 에 모아 GitHub private repo에 push
-# cron: 0 2 * * 0 /home/ksc/KscTool/scripts/backup_dotfiles.sh >> /home/ksc/.dotfiles_backup.log 2>&1
+# backup_dotfiles.sh — 매일 dotfiles를 ~/dotfiles/ 에 모아 GitHub private repo에 push
+# cron: 0 2 * * * /home/ksc/KscTool/scripts/backup_dotfiles.sh >> /home/ksc/.dotfiles_backup.log 2>&1
+#       (2026-08-28 주1회 → 매일. 스킬·규칙이 자주 바뀌는데 최대 7일치가 날아갈 수 있었다)
 
 set -euo pipefail
 
@@ -32,10 +33,23 @@ cp -f "$VSCODE_SRC/keybindings.json" "$DEST/vscode/keybindings.json"
 CLAUDE_SRC="$HOME/.claude"
 cp -f "$CLAUDE_SRC/CLAUDE.md"      "$DEST/claude/CLAUDE.md"
 cp -f "$CLAUDE_SRC/settings.json"  "$DEST/claude/settings.json"
+[ -f "$CLAUDE_SRC/COMMON.md" ]     && cp -f "$CLAUDE_SRC/COMMON.md" "$DEST/claude/COMMON.md"
 [ -f "$CLAUDE_SRC/keybindings.json" ] && cp -f "$CLAUDE_SRC/keybindings.json" "$DEST/claude/keybindings.json"
 
 # hooks 폴더 동기화
 rsync -a --delete "$CLAUDE_SRC/hooks/" "$DEST/claude/hooks/"
+
+# skills 폴더 동기화 — 여기가 빠져 있어서 스킬 18개가 백업 밖에 있었다 (2026-08-28)
+mkdir -p "$DEST/claude/skills"
+rsync -a --delete "$CLAUDE_SRC/skills/" "$DEST/claude/skills/"
+
+# ── Codex ─────────────────────────────────────────────────
+# 규칙·설정만. auth.json(자격증명)·sessions·skills(=Claude 쪽 심볼릭 링크)는 제외한다.
+CODEX_SRC="$HOME/.codex"
+mkdir -p "$DEST/codex"
+for f in AGENTS.md config.toml hooks.json; do
+    [ -f "$CODEX_SRC/$f" ] && cp -f "$CODEX_SRC/$f" "$DEST/codex/$f"
+done
 
 # projects 폴더 — memory/, plans/ 만 백업 (.jsonl 대화록 제외)
 rsync -a --delete --delete-excluded --prune-empty-dirs \

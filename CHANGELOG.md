@@ -44,6 +44,23 @@
 
 ---
 
+## scripts (scripts/backup_dotfiles.sh)
+
+### [1.1.0] — 2026-08-28
+
+#### 변경 내용
+- **스킬 18개가 백업 밖에 있었다.** `~/.claude/skills/` 가 백업 목록에 아예 없어서, `phone-notify`·`ap-pipeline` 같은 절차 스킬이 디스크와 함께 사라질 수 있는 상태였다. `rsync` 대상에 추가.
+- `~/.claude/COMMON.md`(Claude·Codex 공통 규칙 원본)도 빠져 있었다 — 추가.
+- Codex 규칙·설정(`~/.codex/AGENTS.md`, `config.toml`, `hooks.json`)이 통째로 빠져 있었다 — `codex/` 폴더로 추가.
+- **주 1회(목) → 매일 02:00.** 스킬·규칙이 하루에도 여러 번 바뀌는데 최대 7일치가 날아갈 수 있었다.
+
+#### 제외한 것 (의도적)
+- `~/.codex/auth.json` — 자격증명. 백업 저장소가 private 이어도 넣지 않는다.
+- `~/.codex/skills/` — Claude 쪽 심볼릭 링크라 원본만 백업하면 된다.
+- `~/.codex/sessions`(4.8G), `.jsonl` 대화록 — 용량만 크고 복구 가치가 낮다.
+
+---
+
 ## scripts (scripts/backup_memory.sh)
 
 ### [1.0.0] — 2026-08-28
